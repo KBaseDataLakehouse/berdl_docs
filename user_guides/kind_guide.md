@@ -135,9 +135,7 @@ roles into `auth_state.kind_user`; `KIND_ROLES` env on the hub names the
 roles). Everything below no-ops on other pods.
 
 1. **`configs/jupyter_docker_stacks_hooks/13-kind-seed.sh`** (root, before the
-   notebook server): re-seeds `~/.berdl_kbase_session` from the boot-fresh
-   spawner token (so a stale persisted file can never shadow it), seeds
-   `~/koros` + `~/semcat` if absent and **refreshes them to the image's
+   notebook server): seeds `~/koros` + `~/semcat` if absent and **refreshes them to the image's
    pinned refs when they are git-clean and older than the image's** (the
    previous tree is kept under `~/.kind/backups/`, `runs/` — research state —
    is carried over; a checkout with local changes is never touched and is
@@ -168,8 +166,9 @@ roles). Everything below no-ops on other pods.
   per-request auth — **hub-proxy-only access and the loopback bind are
   load-bearing**.
 - The KIND child environment carries **no KBase token**; KIND reads
-  `~/.berdl_kbase_session` per request (rotation-current, boot-seeded), so
-  token rotation reaches it without a restart.
+  `~/.berdl_kbase_session` per request (rotation-current; `11-setup_env.sh`
+  seeds it from the boot-fresh spawner token for every user), so token
+  rotation reaches it without a restart.
 - `/opt/berdl/kind` holds **private kbaseincubator code** (KIND, KOROS,
   semcat, the apps). The image ships it root-only (`0700`); `13-kind-seed.sh`
   opens it (`0755`) only on a pod that opted in, so a user without a KIND role

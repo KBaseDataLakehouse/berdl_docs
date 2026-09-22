@@ -83,7 +83,7 @@ spark = get_spark_session()
 
 This automatically configures:
 - Spark Connect server connection
-- Apache Iceberg catalogs (personal `my` + tenant catalogs via Polaris)
+- Apache Iceberg catalogs (personal `my` + tenant catalogs via Polaris) — `spark.sql("SHOW CATALOGS")` or `list_catalogs()` lists them
 - S3 object storage access
 - Delta Lake support (legacy, for backward compatibility)
 
@@ -175,6 +175,21 @@ db_structure = get_db_structure("my_namespace")
 for table_info in db_structure:
     print(f"Table: {table_info['table']}")
     print(f"Columns: {table_info['columns']}")
+```
+
+## Installing your own Python packages
+
+Install extra packages into a **virtual environment or conda environment**, not with
+`pip install --user`. Packages under `~/.local` are invisible to the notebook server,
+terminals and KIND on purpose (`PYTHONNOUSERSITE=1`): a `--user` package shadows the
+image's copy, survives every image upgrade, and can stop your server from starting.
+Notebook kernels still see `~/.local` for compatibility, but new `--user` installs from a
+terminal are refused.
+
+```bash
+python -m venv ~/envs/myproj && source ~/envs/myproj/bin/activate
+pip install <package>
+python -m ipykernel install --user --name myproj --display-name "Python (myproj)"   # optional: use it as a kernel
 ```
 
 ## Troubleshooting
