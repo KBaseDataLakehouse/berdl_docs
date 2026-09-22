@@ -124,6 +124,14 @@ conn = get_trino_connection()        # recreate the connection
 
 Recreating the connection with `get_trino_connection()` also refreshes your personal Iceberg catalog, which resolves most stale-credential issues on its own.
 
+**Your KBase login expired and you logged in again:** recreate your connection — once — and you are fully back:
+
+```python
+conn = get_trino_connection()        # picks up your fresh token and credentials automatically
+```
+
+A connection object created **before** the expiry does not heal itself: it keeps sending your old token with every query. Within a few minutes it silently loses access to **tenant** catalogs (queries start failing with access errors) while queries against your **personal** catalog may still work — which makes a stale connection easy to mistake for a permissions problem. There is no way to refresh an existing connection; discard it and call `get_trino_connection()` again. The same rule applies after any credential refresh or rotation.
+
 **A tenant catalog is missing from `SHOW CATALOGS`:** tenant catalogs are provisioned by platform automation, not by your notebook session. Confirm you are a member of the tenant; if you are and the catalog still does not appear, contact an administrator.
 
 **`Catalog 'my' not found`:** the `my` alias only exists in Spark. In Trino, use your username as the catalog name.
@@ -133,6 +141,6 @@ Recreating the connection with `get_trino_connection()` also refreshes your pers
 ## Tips
 
 - **Read with Trino, write with Spark**: Trino is ideal for interactive reads; use your Spark session for creating tables and heavy ETL.
-- **Reuse the connection**: create one connection per notebook session and open cursors from it as needed.
+- **Reuse the connection**: create one connection per notebook session and open cursors from it as needed — but recreate it after a KBase re-login or credential refresh (see Troubleshooting).
 - **Standard SQL**: Trino uses ANSI SQL — some functions differ from Spark SQL (see the [Trino functions reference](https://trino.io/docs/current/functions.html)).
 - **Iceberg everywhere**: the same Iceberg table names (aside from `my`) work in both engines, so SQL can be moved between Spark and Trino with minimal changes.

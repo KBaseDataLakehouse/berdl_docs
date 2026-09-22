@@ -26,7 +26,7 @@ All BERDL JupyterHub notebooks automatically import these data governance functi
 *Core Information:*
 - `check_governance_health()` - Check service status
 - `get_credentials()` - Get your S3 and Polaris credentials (sets environment variables)
-- `get_my_sql_warehouse()` - Get your SQL warehouse prefix
+- `get_my_sql_warehouse()` - Get your SQL warehouse root (list-only at the top; tables go under it via `create_namespace_if_not_exists()`, files under `users-general-warehouse/<user>/`)
 - `get_my_workspace()` - Get comprehensive workspace information
 - `get_namespace_prefix(tenant=None)` - Get namespace prefixes for user/tenant
 - `get_my_groups()` - Get list of groups you belong to
@@ -76,9 +76,11 @@ print(f"🔍 Service status: {health.status}")
 health = check_governance_health()
 print(f"Service status: {health.status}")
 
-# Get your SQL warehouse prefix
+# Get your SQL warehouse root. This is where your tables live, not a folder
+# to write into: create tables through create_namespace_if_not_exists() +
+# Spark, and put free-form files under users-general-warehouse/<user>/.
 sql_warehouse = get_my_sql_warehouse()
-print(f"SQL warehouse prefix: {sql_warehouse.sql_warehouse_prefix}")
+print(f"SQL warehouse root: {sql_warehouse.sql_warehouse_prefix}")
 
 # The pre-initialized governance client is also available
 print(f"Governance client ready: {governance is not None}")
