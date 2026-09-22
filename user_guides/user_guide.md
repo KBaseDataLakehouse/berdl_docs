@@ -54,7 +54,9 @@ Log in using your KBase credentials (the same 3rd party identity provider, usern
 By default, you have **read/write access** to:
 - Your personal Iceberg catalog (`my`) — create namespaces and tables here
 - Any tenant Iceberg catalogs you belong to (e.g., `kbase`) — shared team data
-- Your personal S3 storage (`s3a://cdm-lake/users-sql-warehouse/{username}/`)
+- Your personal file storage (`s3a://cdm-lake/users-general-warehouse/{username}/`) — free-form files such as CSVs, TSVs, raw exports, and staged inputs
+
+Your tables live under `s3a://cdm-lake/users-sql-warehouse/{username}/`. That prefix is managed by the catalog: you can list it, but you cannot write files into it directly. Write tables through Spark (see the [Tenant SQL Warehouse Guide](tenant_sql_warehouse_guide.md)) and put everything else in your file storage. The [Object Storage (S3) Guide](s3_guide.md#what-you-can-access-and-why-you-get-accessdenied) explains which prefixes you can write to.
 
 For questions about data access or permissions, please reach out to the BERDL Platform team.
 

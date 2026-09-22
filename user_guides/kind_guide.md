@@ -31,6 +31,15 @@ pre-warms the app portals.
   bar tells you what's missing.
 - **Your research state lives in your home** (`~/koros/runs`, KIND state under
   `~/.local/share/king/runs`) and survives pod restarts and culls.
+- **Tables and files you (or an app) create go to two different places.**
+  Tables belong in your personal Iceberg catalog (`my` in Spark, `<you>` in
+  Trino) and are written through Spark; the catalog manages their S3 layout
+  under `users-sql-warehouse/<you>/`, which is list-only for you. Free-form
+  files (TSVs, raw exports, staged inputs) go under
+  `s3a://cdm-lake/users-general-warehouse/<you>/`. When a table reference has
+  to outlive a session or be used from Trino, store the `<you>.namespace.table`
+  form, not `my.…`. See the [Tenant SQL Warehouse](tenant_sql_warehouse_guide.md)
+  and [S3](s3_guide.md#what-you-can-access-and-why-you-get-accessdenied) guides.
 
 ### If something looks wrong
 

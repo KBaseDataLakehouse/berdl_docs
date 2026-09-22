@@ -78,22 +78,37 @@ Paths you can list/read:
 
 ```bash
 aws s3 ls                                                     # your buckets
-aws s3 ls s3://cdm-lake/users-sql-warehouse/<user>/           # your SQL warehouse
-aws s3 ls s3://cdm-lake/tenant-general-warehouse/<tenant>/    # a tenant you belong to
+aws s3 ls s3://cdm-lake/users-general-warehouse/<user>/       # your files (read/write)
+aws s3 ls s3://cdm-lake/users-sql-warehouse/<user>/           # your tables (list-only root, see below)
+aws s3 ls s3://cdm-lake/tenant-general-warehouse/<tenant>/    # a tenant's files (if you belong to it)
 ```
 
 Paths that return `AccessDenied` by design:
 
 ```bash
-aws s3 ls s3://cdm-lake/tenant-general-warehouse/    # spans every tenant
-aws s3 ls s3://cdm-spark-job-logs/                   # Spark event logs (see below)
+aws s3 cp f.tsv s3://cdm-lake/users-sql-warehouse/<user>/f.tsv   # a table root, not a file drop (see below)
+aws s3 ls s3://cdm-lake/tenant-general-warehouse/                # spans every tenant
+aws s3 ls s3://cdm-spark-job-logs/                               # Spark event logs (see below)
 ```
 
 A few things that commonly trip people up:
 
+- **You have two personal prefixes, and only one of them takes files.**
+  `users-general-warehouse/<user>/` is yours to write: put CSVs, TSVs, raw
+  exports, staged inputs, and anything else that is not a table there.
+  `users-sql-warehouse/<user>/` is where your tables live and is managed by the
+  catalog: you can list it, but a `PutObject` directly under it is denied. Your
+  policy only allows writes inside its governed children (`iceberg/`, which
+  Polaris manages for your `my` catalog, and `u_<user>__*` legacy Delta database
+  directories). Create namespaces with `create_namespace_if_not_exists()` and
+  write tables through Spark; never build a table path by hand from
+  `get_my_sql_warehouse()`. Tenants work the same way:
+  `tenant-general-warehouse/<tenant>/` takes files, and
+  `tenant-sql-warehouse/<tenant>/` is the catalog-managed table root.
 - **You can't list a whole bucket, or a parent prefix that spans other
   users/tenants** — only the specific prefixes your policy grants (your
-  `users-sql-warehouse/<user>/`, and the `tenant-general-warehouse/<tenant>/` of
+  `users-general-warehouse/<user>/` and `users-sql-warehouse/<user>/`, and the
+  `tenant-general-warehouse/<tenant>/` and `tenant-sql-warehouse/<tenant>/` of
   tenants you belong to). This is deliberate isolation between users and tenants.
 - **`aws s3 ls` prefix matching has no implicit trailing slash.**
   `aws s3 ls s3://cdm-lake/tenant-general-warehouse/kbase` matches every prefix
@@ -107,7 +122,7 @@ To see exactly which prefixes you're entitled to, run in a notebook cell:
 
 ```python
 get_my_accessible_paths()   # the prefixes you can list/read
-get_my_sql_warehouse()      # your personal SQL-warehouse prefix
+get_my_sql_warehouse()      # your SQL-warehouse root (list-only; tables land here via Spark)
 get_my_policies()           # the raw IAM policy, including its s3:prefix conditions
 ```
 

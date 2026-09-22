@@ -22,7 +22,7 @@ Step-by-step guides for working with the BERDL platform. Guides live under [`use
 | [Tenant SQL Warehouse](./user_guides/tenant_sql_warehouse_guide.md) | Configuring your Spark session to write to a personal or shared tenant SQL warehouse. |
 | [Trino SQL Queries](./user_guides/trino_guide.md) | Interactive read-only SQL over your data lake tables with Trino. |
 | [Data Sharing](./user_guides/data_sharing_guide.md) | Sharing your datasets with other users and groups. |
-| [Object Storage (S3)](./user_guides/s3_guide.md) | Accessing S3 object storage from notebooks with the AWS CLI and `boto3`. |
+| [Object Storage (S3)](./user_guides/s3_guide.md) | Accessing S3 object storage from notebooks with the AWS CLI and `boto3`, and which prefixes hold your files vs. your tables. |
 | [MinIO Client & UI](./user_guides/minio_guide.md) | Using the `mc` client and MinIO web UI on environments still running MinIO (staging, production). |
 | [Installing Custom Python Packages](./user_guides/custom_packages_guide.md) | Creating a persistent custom virtual environment for extra packages. |
 | [Polaris Catalog Migration](./user_guides/iceberg_migration_guide.md) | Migrating from Delta Lake + Hive Metastore to the Polaris (Iceberg) catalog. |
