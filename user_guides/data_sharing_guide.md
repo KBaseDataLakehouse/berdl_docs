@@ -12,8 +12,8 @@ All data governance functions are **✨ automatically imported** in every notebo
 
 All user data in BERDL is organized under personal namespaces:
 
-- **General Data Storage**: `s3a://cdm-lake/users-general-warehouse/{username}/`
-- **SQL Warehouse**: `s3a://cdm-lake/users-sql-warehouse/{username}/`
+- **General Data Storage**: `s3a://cdm-lake/users-general-warehouse/{username}/` — free-form files you write yourself (CSV, TSV, staged inputs)
+- **SQL Warehouse**: `s3a://cdm-lake/users-sql-warehouse/{username}/` — your tables, written by Spark and managed by the catalog. The root is list-only, so don't put files here directly (see the [S3 guide](s3_guide.md#what-you-can-access-and-why-you-get-accessdenied))
 
 ## Getting Started
 
@@ -337,32 +337,21 @@ for path in shared_paths[:5]:  # Show first 5
 
 ### Accessing Shared Tables in Spark
 
-When others share tables with you, you can access them directly in your Spark sessions:
+Tables shared through a tenant catalog are queried like any other Iceberg table, by `catalog.namespace.table`:
 
 ```python
 # get_spark_session is auto-imported, no need to import
-# Create Spark session
 spark = get_spark_session()
 
-# Option 1: Access shared tables via SQL (if shared SQL warehouse)
-try:
-    shared_df = spark.sql("SELECT * FROM colleague_research.climate_data")
-    print(f"📊 Successfully loaded shared table with {shared_df.count()} rows")
-    shared_df.show(5)
-except Exception as e:
-    print(f"❌ Could not access shared table via SQL: {e}")
-
-# Option 2: Access via direct path (if you know the path)
-shared_table_path = "s3a://cdm-lake/users-sql-warehouse/colleague/research.db/climate_data"
-try:
-    shared_df = spark.read.format("delta").load(shared_table_path)
-    print(f"📊 Successfully loaded shared table with {shared_df.count()} rows")
-except Exception as e:
-    print(f"❌ Could not access shared table: {e}")
-    # Check access
-    access_info = get_table_access_info("research", "climate_data")
-    print(f"Your access granted: {get_my_workspace().username in access_info.users}")
+# A table a colleague wrote to the kbase tenant catalog
+shared_df = spark.sql("SELECT * FROM kbase.research.climate_data")
+print(f"📊 Loaded shared table with {shared_df.count()} rows")
+shared_df.show(5)
 ```
+
+If the query fails with a permission error, confirm you are a member of the tenant with `get_my_groups()` and request access if you are not (see [Requesting Tenant Access](requesting-tenant-access.md)).
+
+> **Legacy Delta tables:** before the Polaris migration, personal tables were Delta directories under `s3a://cdm-lake/users-sql-warehouse/<owner>/` and were shared by S3 path with the now-deprecated `share_table()`. If a colleague shared one of those with you, read it with `spark.read.format("delta").load(path)` using the path they gave you. New tables are Iceberg, their S3 layout is managed by Polaris, and building paths under `users-sql-warehouse/` by hand is not supported.
 
 ## Troubleshooting
 
@@ -376,8 +365,8 @@ except Exception as e:
    print(f"Your SQL warehouse: {sql_warehouse.sql_warehouse_prefix}")
    print(f"Accessible paths: {workspace.accessible_paths}")
    
-   # List all tables
-   spark.sql("SHOW DATABASES").show()
+   # List the namespaces you can see across your personal and tenant catalogs
+   get_databases()
    ```
 
 2. **User Not Found**: Verify usernames are correct and users exist in the system
