@@ -85,9 +85,10 @@ This automatically configures:
 - Spark Connect server connection
 - Apache Iceberg catalogs (personal `my` + tenant catalogs via Polaris) — `spark.sql("SHOW CATALOGS")` or `list_catalogs()` lists them
 - S3 object storage access
-- Delta Lake support (legacy, for backward compatibility)
 
-> **Note:** BERDL has migrated from Delta Lake to Apache Iceberg. See the [Iceberg Migration Guide](iceberg_migration_guide.md) for details on the new catalog structure and Iceberg-specific features like time travel and schema evolution.
+Unqualified names resolve in your personal catalog, so `spark.sql("SELECT * FROM analysis.my_table")` reads `my.analysis.my_table`; tenant tables are written as `<tenant>.<namespace>.<table>`. The [Tenant SQL Warehouse Guide](tenant_sql_warehouse_guide.md) covers creating tables and Iceberg features such as time travel and schema evolution.
+
+> **Note:** Delta Lake and the Hive Metastore have been retired. If a notebook still uses `u_<username>__<db>` or `<tenant>_<db>` names, see [Delta Lake Retirement](iceberg_migration_guide.md) for their new names.
 
 #### 5.2 Refreshing Spark Credentials and Catalog Access
 
@@ -137,7 +138,7 @@ BERDL provides prebuilt functions to explore and query your data. All functions 
 
 #### 6.1 Listing Databases (Namespaces)
 
-Use `get_databases()` to list all namespaces you have access to:
+Use `get_databases()` to list all namespaces you have access to. Each is returned in `catalog.namespace` form (e.g. `my.analysis`, `kbase.genomes`) and can be used directly in a query:
 
 ```python
 # Get list of all databases/namespaces
@@ -151,8 +152,8 @@ Use `get_tables()` to list all tables in a specific namespace:
 
 ```python
 # List all tables in a namespace
-tables = get_tables("my_namespace")
-print(f"Tables in my_namespace: {tables}")
+tables = get_tables("my.my_namespace")
+print(f"Tables in my.my_namespace: {tables}")
 ```
 
 #### 6.3 Getting Table Schema
@@ -160,21 +161,21 @@ print(f"Tables in my_namespace: {tables}")
 Use `get_table_schema()` to view the structure of a table:
 
 ```python
-# Get schema information for a table
-schema = get_table_schema("my_namespace", "my_table")
-display_df(schema)
+# Get the column names of a table (detailed=True adds types and other column details)
+schema = get_table_schema("my.my_namespace", "my_table", return_json=False)
+print(schema)
 ```
 
 #### 6.4 Getting Complete Database Structure
 
-Use `get_db_structure()` to see all tables and their schemas in a namespace:
+Use `get_db_structure()` to see every namespace you can access with its tables and their columns:
 
 ```python
-# Get complete structure of a database
-db_structure = get_db_structure("my_namespace")
-for table_info in db_structure:
-    print(f"Table: {table_info['table']}")
-    print(f"Columns: {table_info['columns']}")
+# Get the complete structure: {namespace: {table: [columns]}}
+db_structure = get_db_structure(with_schema=True, return_json=False)
+for namespace, tables in db_structure.items():
+    for table, columns in tables.items():
+        print(f"{namespace}.{table}: {columns}")
 ```
 
 ## Installing your own Python packages

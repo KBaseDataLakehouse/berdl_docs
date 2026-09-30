@@ -17,7 +17,7 @@ Create a new virtual environment in your home directory with access to all the d
 python -m venv --system-site-packages ~/my_venv
 ```
 
-The `--system-site-packages` flag allows your custom environment to inherit all packages from the default BERDL environment (PySpark, Delta Lake, pandas, etc.) while still allowing you to install additional packages.
+The `--system-site-packages` flag allows your custom environment to inherit all packages from the default BERDL environment (PySpark, pandas, etc.) while still allowing you to install additional packages.
 
 You can name the environment anything you like (e.g., `~/ml_env`, `~/viz_env`, etc.)
 
@@ -151,7 +151,7 @@ deactivate
 ```
 
 Each kernel runs with:
-- **All the default BERDL packages** (PySpark, Delta Lake, pandas, etc.)
+- **All the default BERDL packages** (PySpark, pandas, etc.)
 - **Its own additional specialized packages**
 - **Access to BERDL helper functions** (`get_spark_session()`, `display_df()`, etc.)
 
@@ -281,7 +281,7 @@ If you're unsure which package is the culprit, contact the BERDL Platform team.
 
 ## Using Claude Code CLI with BERDL Datalake MCP Server
 
-Claude Code CLI is an AI-powered development assistant that can interact with your BERDL data lake through the Model Context Protocol (MCP). This allows you to query your Delta Lake tables using natural language directly from your JupyterHub terminal.
+Claude Code CLI is an AI-powered development assistant that can interact with your BERDL data lake through the Model Context Protocol (MCP). This allows you to query your Iceberg tables using natural language directly from your JupyterHub terminal.
 
 > **⚠️ Important Security Warning:**
 > - Query results will be sent to Anthropic's servers
@@ -375,9 +375,7 @@ curl -X 'POST' \
   -H 'accept: application/json' \
   -H 'Authorization: Bearer YOUR_KBASE_TOKEN_HERE' \
   -H 'Content-Type: application/json' \
-  -d '{
-  "use_postgres": true
-}'
+  -d '{}'
 ```
 
 **Replace `YOUR_KBASE_TOKEN` with your actual token from Step 3.**
@@ -415,29 +413,29 @@ List all databases in the BERDL data lake
 
 ## Using Claude Code with Your Data
 
-Once configured, you can interact with your BERDL data using natural language. Claude Code will use the MCP server to execute queries against your Delta Lake tables.
+Once configured, you can interact with your BERDL data using natural language. Claude Code will use the MCP server to execute queries against your Iceberg tables.
 
 ### Example Prompts
 
 **Database Exploration:**
 ```markdown
 - "List all databases in the BERDL data lake"
-- "Show me the tables in my personal database u_username__demo_personal"
-- "What's the schema of the personal_test_table in u_username__demo_personal?"
-- "List all tables in the kbase_ontology_source database"
+- "Show me the tables in my personal database my.demo_personal"
+- "What's the schema of the personal_test_table in my.demo_personal?"
+- "List all tables in the kbase.ontology_source database"
 ```
 
 **Data Analysis:**
 ```markdown
-- "Count the total rows in kbase_ontology_source.entailed_edge"
-- "Show me 10 sample rows from the kbase_ontology_source.entailed_edge"
-- "What columns are available in the kbase_ke_pangenome database tables?"
-- "Get the schema for all tables in globalusers_demo_shared"
+- "Count the total rows in kbase.ontology_source.entailed_edge"
+- "Show me 10 sample rows from the kbase.ontology_source.entailed_edge"
+- "What columns are available in the kbase.ke_pangenome database tables?"
+- "Get the schema for all tables in globalusers.demo_shared"
 ```
 
 ### Best Practices for Claude Code Queries
 
-1. **Be specific about database and table names**: Use the full qualified name (e.g., `u_username__analytics.products`)
+1. **Be specific about database and table names**: Use the fully qualified `catalog.namespace.table` name (e.g., `my.analytics.products`)
 2. **Start with small queries**: Use `LIMIT` to avoid fetching large datasets
 3. **Verify schemas first**: Ask for table schemas before running complex queries
 4. **Test queries incrementally**: Build up complex queries step by step

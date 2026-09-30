@@ -98,11 +98,10 @@ A few things that commonly trip people up:
   exports, staged inputs, and anything else that is not a table there.
   `users-sql-warehouse/<user>/` is where your tables live and is managed by the
   catalog: you can list it, but a `PutObject` directly under it is denied. Your
-  policy only allows writes inside its governed children (`iceberg/`, which
-  Polaris manages for your `my` catalog, and `u_<user>__*` legacy Delta database
-  directories). Create namespaces with `create_namespace_if_not_exists()` and
-  write tables through Spark; never build a table path by hand from
-  `get_my_sql_warehouse()`. Tenants work the same way:
+  policy only allows writes inside its governed `iceberg/` child, which Polaris
+  manages for your `my` catalog. Create namespaces with
+  `create_namespace_if_not_exists()` and write tables through Spark; never build
+  a table path by hand from `get_my_sql_warehouse()`. Tenants work the same way:
   `tenant-general-warehouse/<tenant>/` takes files, and
   `tenant-sql-warehouse/<tenant>/` is the catalog-managed table root.
 - **You can't list a whole bucket, or a parent prefix that spans other

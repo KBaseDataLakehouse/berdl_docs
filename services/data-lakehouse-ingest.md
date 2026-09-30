@@ -10,7 +10,7 @@
 
 ## Overview
 
-`data_lakehouse_ingest` is an end-to-end ingestion framework for loading data into the BER Data Lakehouse using PySpark and MinIO. It reads source datasets from MinIO (Bronze layer), applies optional schema-based casting using SQL-style schema definitions, and writes curated Delta tables to the Silver layer.
+`data_lakehouse_ingest` is an end-to-end ingestion framework for loading data into the BER Data Lakehouse using PySpark and MinIO. It reads source datasets from MinIO (Bronze layer), applies optional schema-based casting using SQL-style schema definitions, and writes curated Iceberg tables to the Silver layer.
 
 The package is pre-installed in the [Spark Notebook](./spark_notebook.md) and auto-imported as `ingest` in the IPython startup environment.
 
@@ -19,7 +19,7 @@ The package is pre-installed in the [Spark Notebook](./spark_notebook.md) and au
 - **Config-Driven**: JSON configuration defines tenant, dataset, paths, schemas, and table definitions. Configs can be loaded inline or from MinIO.
 - **Multi-Format Support**: CSV, TSV, JSON, XML, and Parquet input formats.
 - **Schema Casting**: SQL-style schema definitions (`schema_sql`) for type enforcement.
-- **Delta Lake Output**: Writes curated tables to the Silver layer with optional partitioning.
+- **Iceberg Output**: Writes curated tables to the Silver layer with `writeTo("<catalog>.<namespace>.<table>")` into the Apache Polaris catalogs (`<tenant>` for tenant configs, `my` for personal ones), with optional partitioning.
 - **LinkML Validation**: Integrates LinkML for schema validation.
 - **Logging**: Contextual logging with pipeline, schema, and table metadata.
 

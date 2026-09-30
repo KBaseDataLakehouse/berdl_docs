@@ -110,6 +110,93 @@ spark.sql("""
 """)
 ```
 
+## Working with Iceberg Tables
+
+In the examples below, `my` is your personal catalog; a tenant catalog (`kbase.research.my_table`) works the same way.
+
+### Write a Table
+
+```python
+# Create the table, or replace it if it exists
+df.writeTo("my.analysis.my_table").createOrReplace()
+
+# Append rows to an existing table
+df.writeTo("my.analysis.my_table").append()
+```
+
+`df.write.format("iceberg").saveAsTable(...)` also works; `writeTo` is recommended because it supports `createOrReplace()` and `append()` natively.
+
+> **Bulk ingestion?** For config-driven loading from CSV/TSV/JSON/XML/Parquet sources, the auto-imported `ingest(config)` function from `data_lakehouse_ingest` handles namespace creation, schema enforcement, and writes Iceberg Silver tables in one call. See its docstring for the config schema.
+
+### List Namespaces and Tables
+
+```python
+# Every namespace you can access, across your personal and tenant catalogs,
+# as "my.analysis", "alice.analysis", "kbase.genomes", ... (usable directly in queries)
+get_databases()
+
+# Tables in one namespace; "my" and your username are aliases for the same catalog
+get_tables("kbase.genomes")
+get_tables("my.analysis")
+get_tables("alice.analysis")
+```
+
+### Drop a Table
+
+```python
+# PURGE removes both the catalog entry and the underlying S3 data files
+spark.sql("DROP TABLE IF EXISTS my.analysis.my_table PURGE")
+```
+
+Plain `DROP TABLE` (no `PURGE`) removes only the catalog entry and leaves the data files in S3.
+
+### Drop a Whole Namespace (and its S3 data)
+
+Polaris does not support `DROP NAMESPACE ... CASCADE`: a namespace can only be dropped once it is empty. To remove a namespace and its data, `DROP TABLE ... PURGE` every table first, then drop the empty namespace:
+
+```python
+ns = "my.analysis"
+
+# return_json=False gives a Python list to iterate
+for table in get_tables(ns, return_json=False):
+    spark.sql(f"DROP TABLE IF EXISTS {ns}.{table} PURGE")
+
+spark.sql(f"DROP NAMESPACE IF EXISTS {ns}")
+```
+
+`get_tables(ns)` returns a JSON string by default, hence `return_json=False`. Skipping `PURGE` leaves orphaned files in S3 even after the namespace is gone.
+
+### Time Travel
+
+```python
+# Snapshot history
+spark.sql("SELECT * FROM my.analysis.my_table.snapshots")
+
+# The table as it was at a snapshot
+spark.sql("SELECT * FROM my.analysis.my_table VERSION AS OF 1234567890")
+
+# The table as it was at a point in time
+spark.sql("SELECT * FROM my.analysis.my_table TIMESTAMP AS OF '2026-03-01 12:00:00'")
+```
+
+### Schema Evolution
+
+Change a table's schema without rewriting its data:
+
+```python
+spark.sql("ALTER TABLE my.analysis.my_table ADD COLUMN email STRING")
+spark.sql("ALTER TABLE my.analysis.my_table RENAME COLUMN name TO full_name")
+spark.sql("ALTER TABLE my.analysis.my_table DROP COLUMN temp_field")
+```
+
+### Inspect Snapshots, Files and History
+
+```python
+display_df(spark.sql("SELECT * FROM my.analysis.my_table.snapshots"))
+display_df(spark.sql("SELECT * FROM my.analysis.my_table.files"))
+display_df(spark.sql("SELECT * FROM my.analysis.my_table.history"))
+```
+
 ## Querying from Trino
 
 Tables you write here are also readable from Trino (read-only). Catalog names are the same in both engines with one exception: `my` is a **Spark-only** alias. In Trino your personal catalog appears under your username, so `my.analysis.my_table` in Spark is `{username}.analysis.my_table` in Trino.
@@ -122,5 +209,6 @@ Your username also works in Spark, so it is the portable form. Use it whenever y
 - **Tenant membership required**: Attempting to access a tenant warehouse without membership will fail.
 - **Credentials are automatic**: S3 and Polaris credentials are set by JupyterHub — you don't need to call any API to get them.
 - **Spark Connect is default**: All sessions use Spark Connect for better stability and resource isolation.
-- **Iceberg features**: Your tables support time travel, schema evolution, and snapshot management. See the [Iceberg Migration Guide](iceberg_migration_guide.md) for details.
+- **Iceberg features**: Your tables support time travel, schema evolution, and snapshot management. See [Working with Iceberg Tables](#working-with-iceberg-tables).
+- **Old `u_<user>__<db>` or `<tenant>_<db>` names**: Delta Lake is retired; see [Delta Lake Retirement](iceberg_migration_guide.md) for the new names.
 - **Persist the portable name**: `my` does not exist in Trino. Store `{username}.{namespace}.{table}` when a reference has to outlive the session or be used outside Spark (see [Querying from Trino](#querying-from-trino)).

@@ -25,7 +25,7 @@ Step-by-step guides for working with the BERDL platform. Guides live under [`use
 | [Object Storage (S3)](./user_guides/s3_guide.md) | Accessing S3 object storage from notebooks with the AWS CLI and `boto3`, and which prefixes hold your files vs. your tables. |
 | [MinIO Client & UI](./user_guides/minio_guide.md) | Using the `mc` client and MinIO web UI on environments still running MinIO (staging, production). |
 | [Installing Custom Python Packages](./user_guides/custom_packages_guide.md) | Creating a persistent custom virtual environment for extra packages. |
-| [Polaris Catalog Migration](./user_guides/iceberg_migration_guide.md) | Migrating from Delta Lake + Hive Metastore to the Polaris (Iceberg) catalog. |
+| [Delta Lake Retirement](./user_guides/iceberg_migration_guide.md) | Delta Lake and the Hive Metastore are retired: how old table names map to the Iceberg catalogs and what code changed. |
 | [Admin: User & Tenant Management](./user_guides/admin_user_management_guide.md) | Administrative operations for managing users, tenants, and access (requires admin role). |
 
 ## System Architecture
@@ -64,11 +64,12 @@ graph LR
     subgraph Compute ["Shared Compute"]
         direction TB
         SM[Shared Static Cluster]
+        TR[Trino]
     end
 
     subgraph Data ["Data & Metadata"]
         direction TB
-        HM[Hive Metastore]
+        POL["Apache Polaris (Iceberg REST Catalog)"]
         S3[MinIO Storage]
     end
 
@@ -103,18 +104,23 @@ graph LR
     TAS -->|"Add to Group"| MMS
     MCP -->|"Direct/Fallback"| SM
     MCP -->|"Via Hub"| DYNC
+    MCP -->|"SQL"| TR
     MMS -->|"Manage Policies"| S3
+    MMS -->|"Manage Catalogs"| POL
 
     %% Data Access
     NB -->|"S3"| S3
-    NB -->|"Metadata"| HM
+    NB -->|"Catalog"| POL
+    NB -->|"SQL"| TR
     MCP -->|"S3"| S3
-    MCP -->|"Metadata"| HM
+    MCP -->|"Catalog"| POL
+    TR -->|"Catalog"| POL
+    TR -->|"S3"| S3
     DYNC -->|"Process"| S3
     SM -->|"Process"| S3
 
     %% Infrastructure Backends
-    HM -->|"Store"| PG
+    POL -->|"Store"| PG
     S3 -.->|"Disk"| Disk
 
     %% Styling
@@ -124,8 +130,8 @@ graph LR
     classDef external fill:#e8e8e8,stroke:#333,stroke-width:1px;
     
     class JH,NB,MMS,SCM,MCP,TAS,SPX service;
-    class S3,HM,PG,Disk storage;
-    class DYNC,SM compute;
+    class S3,POL,PG,Disk storage;
+    class DYNC,SM,TR compute;
     class Slack,Remote,SPXClient external;
 ```
 
@@ -262,7 +268,6 @@ graph TD
 | **Datalake MCP Server** | FastAPI Data API with MCP layer for AI interactions and direct queries. | [Datalake MCP Service](./services/datalake-mcp-service.md) | [Repo](https://github.com/KBaseDataLakehouse/datalake-mcp-server) |
 | **Spark Cluster Manager** | API for managing dynamic, personal Spark clusters on K8s. | [Spark Cluster Manager](./services/spark-cluster-manager.md) | [Repo](https://github.com/KBaseDataLakehouse/spark_cluster_manager) |
 | **Tenant Access Request Service** | Slack workflow for users to request access to tenant groups. | [Tenant Access Request Service](./services/tenant-access-request-service.md) | [Repo](https://github.com/KBaseDataLakehouse/tenant_access_request_service) |
-| **Hive Metastore** | Central metadata catalog for Delta Lake tables. | [Hive Metastore](./services/hive-metastore.md) | [Repo](https://github.com/KBaseDataLakehouse/hive_metastore) |
 | **Spark Cluster** | Spark master/worker image for static and dynamic clusters. | [Spark Cluster](./services/spark-cluster.md) | [Repo](https://github.com/KBaseDataLakehouse/kube_spark_manager_image) |
 | | **Data Tools & Frameworks** | | |
 | **Data Lakehouse Ingest** | Config-driven PySpark ingestion framework for Bronze→Silver ETL. | [Data Lakehouse Ingest](./services/data-lakehouse-ingest.md) | [Repo](https://github.com/kbase/data-lakehouse-ingest) |
