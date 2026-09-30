@@ -12,11 +12,12 @@
 ## Overview
 
 This image provides the core runtime environment for `spark_notebook` and dynamic Spark cluster components. It bundles:
-- **PySpark 4.0.1** with Spark Connect (based on `quay.io/jupyter/pyspark-notebook`).
-- **Delta Lake 4.0.1** — Delta Spark integration.
-- **PyIceberg 0.9.1** — Apache Iceberg table support with S3.
-- **Trino 0.337** — Trino Python client for direct query access.
-- **Java Dependencies**: Custom JARs built via Gradle (Delta Lake connectors, auth JARs, etc.).
+- **PySpark 4.1.3** with Spark Connect (based on `quay.io/jupyter/pyspark-notebook`).
+- **Apache Iceberg 1.11.0** — Iceberg Spark runtime for reading and writing tables in the Apache Polaris REST catalogs.
+- **Apache Sedona 1.9.1** — Geospatial SQL functions and types for Spark.
+- **PyIceberg 0.12.0** — Apache Iceberg table support with S3.
+- **Trino 0.340** — Trino Python client for direct query access.
+- **Java Dependencies**: JARs downloaded via Gradle (Iceberg Spark runtime, Sedona, `hadoop-aws` and the AWS SDK bundle) plus the custom KBase auth and namespace-validation Spark Connect interceptors.
 - **Python Dependencies**: Managed via `uv` and `pyproject.toml`.
 - **System Utilities**: `mc` (MinIO Client), `redis-tools`, `gettext`.
 

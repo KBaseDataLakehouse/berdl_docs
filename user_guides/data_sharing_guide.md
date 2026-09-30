@@ -2,7 +2,7 @@
 
 ## Overview
 
-The BERDL (BER Data Lake) JupyterHub platform provides data sharing capabilities that allow users to share their datasets with other users and groups.
+The BERDL (BER Data Lake) JupyterHub platform lets you share datasets with other users through **tenants**: groups whose members share an Iceberg catalog for tables (e.g. `kbase`) and a storage prefix for files.
 
 All data governance functions are **✨ automatically imported** in every notebook - no manual imports needed! This guide shows you how to use these pre-loaded functions for seamless data sharing and collaboration.
 
@@ -14,6 +14,11 @@ All user data in BERDL is organized under personal namespaces:
 
 - **General Data Storage**: `s3a://cdm-lake/users-general-warehouse/{username}/` — free-form files you write yourself (CSV, TSV, staged inputs)
 - **SQL Warehouse**: `s3a://cdm-lake/users-sql-warehouse/{username}/` — your tables, written by Spark and managed by the catalog. The root is list-only, so don't put files here directly (see the [S3 guide](s3_guide.md#what-you-can-access-and-why-you-get-accessdenied))
+
+Each tenant has the same pair, shared by its members:
+
+- **Tenant tables**: the tenant's Iceberg catalog (e.g. `kbase.research.my_table`), stored under `s3a://cdm-lake/tenant-sql-warehouse/{tenant}/`
+- **Tenant files**: `s3a://cdm-lake/tenant-general-warehouse/{tenant}/` — free-form files shared with the tenant
 
 ## Getting Started
 
@@ -28,16 +33,9 @@ All BERDL JupyterHub notebooks automatically import these data governance functi
 - `get_credentials()` - Get your S3 and Polaris credentials (sets environment variables)
 - `get_my_sql_warehouse()` - Get your SQL warehouse root (list-only at the top; tables go under it via `create_namespace_if_not_exists()`, files under `users-general-warehouse/<user>/`)
 - `get_my_workspace()` - Get comprehensive workspace information
-- `get_namespace_prefix(tenant=None)` - Get namespace prefixes for user/tenant
 - `get_my_groups()` - Get list of groups you belong to
 - `get_my_policies()` - Get detailed policy information
-
-*Sharing Functions (DEPRECATED):*
-- `get_table_access_info(namespace, table_name)` - Check who has access to a SQL table
-- `make_table_private(namespace, table_name)` - **(DEPRECATED)** Remove public access from SQL tables
-- `make_table_public(namespace, table_name)` - **(DEPRECATED)** Make SQL tables publicly accessible
-- `share_table(namespace, table_name, with_users, with_groups)` - **(DEPRECATED)** Share SQL tables
-- `unshare_table(namespace, table_name, from_users, from_groups)` - **(DEPRECATED)** Unshare SQL tables
+- `get_my_accessible_paths()` - Get every S3 prefix you can read
 
 *Admin Functions (Tenant/Group Management):*
 - `create_tenant_and_assign_users(tenant_name, usernames)` - Create tenant and add users (admin only)
@@ -46,11 +44,11 @@ All BERDL JupyterHub notebooks automatically import these data governance functi
 **Pre-Initialized Client:**
 - `governance` - Pre-initialized `DataGovernanceClient()` instance for advanced operations
 **Other Auto-Imported Functions:**
-- `get_spark_session()` - Create Spark sessions with Iceberg + Delta Lake support
-- `create_namespace_if_not_exists()` - Create namespaces (use `iceberg=True` for Iceberg catalogs)
+- `get_spark_session()` - Create Spark sessions with your Iceberg catalogs
+- `create_namespace_if_not_exists()` - Create namespaces in your personal catalog or, with `tenant_name=`, a tenant catalog
 - Plus many other utility functions for data operations
 
-> **Note:** With the migration to Iceberg, **tenant catalogs** are the recommended way to share data. Create tables in a tenant catalog (e.g., `kbase`) and all members can access them. See the [Iceberg Migration Guide](iceberg_migration_guide.md) for details.
+> **Note:** **Tenant catalogs** are how you share tables. Create tables in a tenant catalog (e.g., `kbase`) and all members can access them. See [Sharing Tables Through a Tenant](#sharing-tables-through-a-tenant) below.
 
 ### Quick Start
 
@@ -96,14 +94,6 @@ print(f"Home paths: {workspace.home_paths}")
 print(f"Groups: {workspace.groups}")
 print(f"Total accessible paths: {len(workspace.accessible_paths)}")
 
-# Get your namespace prefix
-namespace_info = get_namespace_prefix()
-print(f"User namespace prefix: {namespace_info.user_namespace_prefix}")
-
-# Get namespace prefix for a tenant (if you're a member)
-tenant_namespace = get_namespace_prefix(tenant="kbase")
-print(f"Tenant namespace prefix: {tenant_namespace.tenant_namespace_prefix}")
-
 # Get list of groups you belong to
 my_groups = get_my_groups()
 print(f"Your groups: {my_groups.groups}")
@@ -147,166 +137,24 @@ group_warehouse = get_group_sql_warehouse("kbase")
 print(f"Group SQL warehouse: {group_warehouse.sql_warehouse_prefix}")
 ```
 
-### Working with Tenant Namespaces
+## Sharing Tables Through a Tenant
+
+Write a table to a tenant catalog and every member of that tenant can query it. Members of the tenant's read-only group (`<tenant>ro`) can read the tables but not change them.
 
 ```python
-# Get your user namespace prefix
-user_ns = get_namespace_prefix()
-print(f"Your databases should start with: {user_ns.user_namespace_prefix}")
+spark = get_spark_session()
 
-# Get namespace prefix for a tenant you belong to
-tenant_ns = get_namespace_prefix(tenant="kbase")
-print(f"Tenant databases should start with: {tenant_ns.tenant_namespace_prefix}")
+# Create a namespace in the kbase tenant catalog and write a table to it
+ns = create_namespace_if_not_exists(spark, "research", tenant_name="kbase")
+# Returns: "kbase.research"
+df.writeTo(f"{ns}.climate_data").createOrReplace()
 ```
 
-## Sharing SQL Warehouse Tables (DEPRECATED)
+To share files that are not tables (CSV, TSV, raw exports), put them under the tenant's file prefix, `s3a://cdm-lake/tenant-general-warehouse/<tenant>/`.
 
-> **⚠️ DEPRECATION WARNING**: Direct path sharing functions (`share_table`, `unshare_table`) are deprecated and will be removed in a future release. Please create a **Tenant Workspace** and manage access dynamically through tenant groups instead.
-
-### Share Tables with Users
-
-```python
-# Share a table with specific users
-response = share_table(
-    namespace="personal_namespace",
-    table_name="table_name_to_share",
-    with_users=["bob", "alice"]
-)
-
-print(f"Shared with users: {response.shared_with_users}")
-print(f"Success count: {response.success_count}")
-if response.errors:
-    print(f"Errors: {response.errors}")
-```
-
-### Share Tables with Groups
-
-```python
-# Share a table with groups
-response = share_table(
-    namespace="personal_namespace", 
-    table_name="table_name_to_share",
-    with_groups=["kbase"]
-)
-
-print(f"Shared with groups: {response.shared_with_groups}")
-if response.errors:
-    print(f"Errors: {response.errors}")
-```
-
-### Share with Both Users and Groups
-
-```python
-# Share with combination of users and groups
-response = share_table(
-    namespace="personal_namespace",
-    table_name="table_name_to_share",
-    with_users=["bob", "alice"],
-    with_groups=["kbase"]
-)
-
-print(f"Successfully shared with {response.success_count} recipients")
-if response.errors:
-    print(f"Errors: {response.errors}")
-```
-
-## Unsharing SQL Warehouse Tables (DEPRECATED)
-
-> **⚠️ DEPRECATION WARNING**: Direct path sharing functions (`share_table`, `unshare_table`) are deprecated and will be removed in a future release. Please create a **Tenant Workspace** and manage access dynamically through tenant groups instead.
-
-### Remove Access from Users
-
-```python
-# Remove access from specific users
-response = unshare_table(
-    namespace="personal_namespace",
-    table_name="table_name_to_share",
-    from_users=["bob"]  # Remove bob's access, alice keeps access
-)
-
-print(f"Removed access from: {response.unshared_from_users}")
-if response.errors:
-    print(f"Errors: {response.errors}")
-```
-
-### Remove Access from Groups
-
-```python
-# Remove group access
-response = unshare_table(
-    namespace="personal_namespace",
-    table_name="table_name_to_share", 
-    from_groups=["kbase"]
-)
-
-print(f"Removed group access from: {response.unshared_from_groups}")
-if response.errors:
-    print(f"Errors: {response.errors}")
-```
-
-### Unshare from Both Users and Groups
-
-```python
-# Unshare from both users and groups
-response = unshare_table(
-    namespace="personal_namespace",
-    table_name="table_name_to_share",
-    from_users=["bob", "alice"],
-    from_groups=["kbase"]
-)
-
-print(f"Completely privatized table: {response.success_count} removals")
-if response.errors:
-    print(f"Errors: {response.errors}")
-```
-
-## Public and Private Table Access (DEPRECATED)
-
-> **⚠️ DEPRECATION WARNING**: Direct public path sharing functions (`make_table_public`, `make_table_private`) are deprecated. Please create a namespace under the `kbase` tenant for public sharing activities instead.
-
-### Make Tables Publicly Accessible
-
-```python
-# Make a table publicly accessible to all users
-response = make_table_public(
-    namespace="public_data",
-    table_name="climate_dataset"
-)
-
-print(f"Table is now public: {response.is_public}")
-print(f"Public path: {response.path}")
-```
-
-### Make Tables Private
-
-```python
-# Remove public access and make table private again
-response = make_table_private(
-    namespace="public_data", 
-    table_name="climate_dataset"
-)
-
-print(f"Table is now private: {not response.is_public}")
-```
+To give someone access, add them to the tenant: a steward uses `add_tenant_member()`, and anyone can ask to join with `request_tenant_access()` (see [Requesting Tenant Access](requesting-tenant-access.md)). There is no per-table or per-path sharing; access follows tenant membership.
 
 ## Managing Access Information
-
-### Check Table Access
-
-For SQL warehouse tables, use the convenient `get_table_access_info` function:
-
-```python
-# Check access for a specific table (much easier than constructing paths!)
-access_info = get_table_access_info(
-    namespace="personal_namespace",
-    table_name="table_name_to_share"
-)
-
-print(f"Users with access: {access_info.users}")
-print(f"Groups with access: {access_info.groups}")
-print(f"Public access: {access_info.public}")
-print(f"Full path: {access_info.path}")
-```
 
 ### View Your Complete Workspace
 
@@ -353,7 +201,7 @@ shared_df.show(5)
 
 If the query fails with a permission error, confirm you are a member of the tenant with `get_my_groups()` and request access if you are not (see [Requesting Tenant Access](requesting-tenant-access.md)).
 
-> **Legacy Delta tables:** before the Polaris migration, personal tables were Delta directories under `s3a://cdm-lake/users-sql-warehouse/<owner>/` and were shared by S3 path with the now-deprecated `share_table()`. If a colleague shared one of those with you, read it with `spark.read.format("delta").load(path)` using the path they gave you. New tables are Iceberg, their S3 layout is managed by Polaris, and building paths under `users-sql-warehouse/` by hand is not supported.
+> **Delta Lake is retired:** tables that used to be shared as Delta paths or `u_<user>__<db>` / `<tenant>_<db>` databases are now Iceberg tables. See [Delta Lake Retirement](iceberg_migration_guide.md) for their new names.
 
 ## Troubleshooting
 
@@ -379,9 +227,9 @@ If the query fails with a permission error, confirm you are a member of the tena
     get_databases()
     ```
 
-4. **Permission Denied**: You can only share tables that you own. **Make sure the table is stored in your SQL warehouse location.**
+4. **Permission Denied on a tenant table**: Confirm you are a member of the tenant with `get_my_groups()`. Reading needs the tenant or its read-only group; writing needs the tenant itself.
 
-5. **Sharing not taking effect**: S3 access policies may take a few seconds to propagate. Wait 5-10 seconds and retry accessing the shared resource.
+5. **New tenant access not taking effect**: After you are added to a tenant, run `refresh_spark_environment()` and create a new Spark session (see the [User Guide](user_guide.md#52-refreshing-spark-credentials-and-catalog-access)).
 
 
 ### Getting Help

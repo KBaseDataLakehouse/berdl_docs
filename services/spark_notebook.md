@@ -20,7 +20,7 @@ The Spark Notebook is the primary user interface for the BERDL platform. It prov
 - **AI Integration**: Includes `jupyter-ai` with CBorg, OpenAI, Anthropic, and Ollama providers, plus MCP tool discovery via `langchain-mcp-tools`.
 - **Tenant Access UI**: Built-in [Access Request Extension](./berdl-access-request-extension.md) for requesting data access.
 - **Trino Integration**: Direct Trino query support via `trino` Python client.
-- **Apache Iceberg**: PyIceberg 0.9.1 with S3 support for Iceberg table operations.
+- **Apache Iceberg**: Spark reads and writes Iceberg tables through the Apache Polaris REST catalogs (`my` for personal tables, `<tenant>` for tenant tables); PyIceberg 0.12.0 is included for direct Iceberg table operations.
 - **Persistent Shell Customization**: Users can configure their shell environments persistently via `~/.custom_profile`.
 
 ## Lifecycle
@@ -42,7 +42,7 @@ graph TD
     
     NB -->|Spark Connect| MCP[Datalake MCP Server]
     NB -->|S3| MIN[MinIO]
-    NB -->|Metadata| HM[Hive Metastore]
+    NB -->|Iceberg REST| POL[Apache Polaris]
 ```
 
 ## Internal Components
