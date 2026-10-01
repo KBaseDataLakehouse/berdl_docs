@@ -27,7 +27,7 @@ print(cur.fetchall())
 Behind the scenes, the helper:
 
 1. Fetches your MinIO (S3) credentials from the governance API
-2. Creates your personal Iceberg catalog (`{username}`) backed by Polaris
+2. Creates your personal Iceberg catalog (`{username}`) backed by Polaris and makes it the connection's default catalog
 3. Passes your KBase token to Trino so tenant membership can be resolved for access control
 
 No manual credential handling is needed.
@@ -62,6 +62,10 @@ Iceberg table names are portable between Spark and Trino, with one exception: th
 | Personal Iceberg | `my.analysis.t` or `alice.analysis.t` | `alice.analysis.t` |
 | Tenant Iceberg | `kbase.research.t` | `kbase.research.t` |
 
+### Names and Case
+
+Trino treats identifiers as case-insensitive and shows them in lower case. A table created in Spark as `Genome_ANI` is listed by Trino as `genome_ani`, and `kbase.research.genome_ani`, `kbase.research.Genome_ANI` and `kbase.research."Genome_ANI"` all read it. Result column names come back in lower case too (`BiGG_Reaction` becomes `bigg_reaction`), so build DataFrames from `cursor.description` rather than from the names you expect.
+
 ## Example Queries
 
 ### Discovery
@@ -70,10 +74,17 @@ Iceberg table names are portable between Spark and Trino, with one exception: th
 cur.execute("SHOW CATALOGS")                      # catalogs you can access
 cur.execute("SHOW SCHEMAS FROM alice")            # namespaces in your personal catalog
 cur.execute("SHOW TABLES FROM alice.analysis")    # tables in a namespace
-cur.execute("SHOW COLUMNS FROM alice.analysis.my_table")
 ```
 
-The `information_schema` of each catalog is also available:
+**Column names and types:** `SHOW COLUMNS`, `DESCRIBE` and `information_schema.columns` currently return nothing for Iceberg tables on BERDL's Trino (a known gap between Trino's Iceberg REST connector and Polaris). Read the columns from an empty result instead:
+
+```python
+cur.execute("SELECT * FROM alice.analysis.my_table WHERE 1 = 0")
+cur.fetchall()
+columns = [(d[0], d[1]) for d in cur.description]   # [('id', 'bigint'), ('name', 'varchar'), ...]
+```
+
+The `information_schema` of each catalog is available for schemas and tables (only its `columns` view is empty):
 
 ```python
 cur.execute("""
@@ -136,11 +147,13 @@ A connection object created **before** the expiry does not heal itself: it keeps
 
 **`Catalog 'my' not found`:** the `my` alias only exists in Spark. In Trino, use your username as the catalog name.
 
+**`SHOW COLUMNS` or `DESCRIBE` returns no rows:** expected for now; use the empty `SELECT ... WHERE 1 = 0` pattern under [Discovery](#discovery) to read column names and types.
+
 **A table created in Spark does not appear:** make sure you query the right catalog — tables written to `my.<namespace>` in Spark appear under `{username}.<namespace>` in Trino.
 
 ## Tips
 
 - **Read with Trino, write with Spark**: Trino is ideal for interactive reads; use your Spark session for creating tables and heavy ETL.
-- **Reuse the connection**: create one connection per notebook session and open cursors from it as needed — but recreate it after a KBase re-login or credential refresh (see Troubleshooting).
+- **Reuse the connection**: create one connection per notebook session and open cursors from it as needed — but recreate it after a KBase re-login or credential refresh (see Troubleshooting). Every `get_trino_connection()` call re-creates your personal catalog on the Trino coordinator (several statements before your first query), so do not call it per query or inside a polling loop.
 - **Standard SQL**: Trino uses ANSI SQL — some functions differ from Spark SQL (see the [Trino functions reference](https://trino.io/docs/current/functions.html)).
 - **Iceberg everywhere**: the same Iceberg table names (aside from `my`) work in both engines, so SQL can be moved between Spark and Trino with minimal changes.
