@@ -151,6 +151,8 @@ A connection object created **before** the expiry does not heal itself: it keeps
 
 **A table created in Spark does not appear:** make sure you query the right catalog — tables written to `my.<namespace>` in Spark appear under `{username}.<namespace>` in Trino.
 
+**`GENERIC_INTERNAL_ERROR` with `Namespace does not exist: <name>`:** the schema in your query does not exist in that catalog. Trino reports a missing Iceberg namespace as an internal error instead of "schema not found", but nothing is broken. Check the spelling with `SHOW SCHEMAS FROM <catalog>`, and remember that a two-part name (`schema.table`) is looked up in your personal catalog. Old Delta-style names that join the tenant and namespace with `_` (for example `kbase_research.genome`) no longer exist; use the three-part name (`kbase.research.genome`).
+
 **A view fails with `Cannot read unsupported dialect 'spark' for view ...`** (`ICEBERG_UNSUPPORTED_VIEW_DIALECT`): a view created with `CREATE VIEW` in Spark stores its definition in Spark SQL only, and Trino cannot read it, although it still appears in `SHOW TABLES`. Read the view from your Spark session, or query its underlying tables in Trino (`SHOW CREATE TABLE <view>` in Spark prints its SQL). If you need the result in Trino, save it as a table from Spark (`CREATE TABLE ... AS SELECT ...`).
 
 ## Tips
