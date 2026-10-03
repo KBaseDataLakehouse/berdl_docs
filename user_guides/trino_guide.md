@@ -151,9 +151,11 @@ A connection object created **before** the expiry does not heal itself: it keeps
 
 **A table created in Spark does not appear:** make sure you query the right catalog — tables written to `my.<namespace>` in Spark appear under `{username}.<namespace>` in Trino.
 
+**A view fails with `Cannot read unsupported dialect 'spark' for view ...`** (`ICEBERG_UNSUPPORTED_VIEW_DIALECT`): a view created with `CREATE VIEW` in Spark stores its definition in Spark SQL only, and Trino cannot read it, although it still appears in `SHOW TABLES`. Read the view from your Spark session, or query its underlying tables in Trino (`SHOW CREATE TABLE <view>` in Spark prints its SQL). If you need the result in Trino, save it as a table from Spark (`CREATE TABLE ... AS SELECT ...`).
+
 ## Tips
 
 - **Read with Trino, write with Spark**: Trino is ideal for interactive reads; use your Spark session for creating tables and heavy ETL.
 - **Reuse the connection**: create one connection per notebook session and open cursors from it as needed — but recreate it after a KBase re-login or credential refresh (see Troubleshooting). Every `get_trino_connection()` call re-creates your personal catalog on the Trino coordinator (several statements before your first query), so do not call it per query or inside a polling loop.
 - **Standard SQL**: Trino uses ANSI SQL — some functions differ from Spark SQL (see the [Trino functions reference](https://trino.io/docs/current/functions.html)).
-- **Iceberg everywhere**: the same Iceberg table names (aside from `my`) work in both engines, so SQL can be moved between Spark and Trino with minimal changes.
+- **Iceberg everywhere**: the same Iceberg table names (aside from `my`) work in both engines, so SQL can be moved between Spark and Trino with minimal changes. Views are the exception: a view created in Spark can only be read from Spark (see Troubleshooting).
