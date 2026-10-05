@@ -32,6 +32,16 @@ Behind the scenes, the helper:
 
 No manual credential handling is needed.
 
+If you open a connection yourself with `trino.dbapi.connect(...)` instead, pass your KBase token the same way, or every tenant catalog fails with `Access Denied: Cannot access catalog`:
+
+```python
+import os, trino
+conn = trino.dbapi.connect(
+    host=os.environ["TRINO_HOST"], port=int(os.environ["TRINO_PORT"]), user=os.environ["USER"],
+    extra_credential=[("kbase_auth_token", os.environ["KBASE_AUTH_TOKEN"])],
+)
+```
+
 ### Results as a pandas DataFrame
 
 ```python
@@ -126,14 +136,26 @@ cur.execute("""
 
 ## Troubleshooting
 
-**Queries fail with a credential or authorization error** (e.g., `Access Denied`, S3 403, `unauthorized_client`):
+**Queries fail with a credential or authorization error** (e.g., `Access Denied`, S3 403, `unauthorized_client`): recreate the connection first. It refreshes your personal Iceberg catalog with your current credentials, which resolves most stale-credential issues on its own:
 
 ```python
-refresh_spark_environment()          # rotates credentials, refreshes Spark + Trino catalogs
-conn = get_trino_connection()        # recreate the connection
+conn = get_trino_connection()
 ```
 
-Recreating the connection with `get_trino_connection()` also refreshes your personal Iceberg catalog, which resolves most stale-credential issues on its own.
+Only if that does not help, rotate your credentials and connect again:
+
+```python
+refresh_spark_environment()          # rotates credentials, restarts Spark, refreshes the Trino catalog
+conn = get_trino_connection()
+```
+
+`refresh_spark_environment()` issues **new** S3 and Polaris secrets and revokes the old ones immediately, so every other kernel, script or app still holding the old ones (Spark sessions, boto3/fsspec clients, Trino connections) starts failing until it reconnects. Run it by hand when something is actually broken, never in a loop, a retry handler or several processes at once. To recover a dead Spark session without rotating, restart Spark Connect with your current credentials instead:
+
+```python
+from berdl_notebook_utils.spark.connect_server import start_spark_connect_server
+start_spark_connect_server(force_restart=True)
+spark = get_spark_session()
+```
 
 **Your KBase login expired and you logged in again:** recreate your connection — once — and you are fully back:
 
@@ -142,6 +164,8 @@ conn = get_trino_connection()        # picks up your fresh token and credentials
 ```
 
 A connection object created **before** the expiry does not heal itself: it keeps sending your old token with every query. Within a few minutes it silently loses access to **tenant** catalogs (queries start failing with access errors) while queries against your **personal** catalog may still work — which makes a stale connection easy to mistake for a permissions problem. There is no way to refresh an existing connection; discard it and call `get_trino_connection()` again. The same rule applies after any credential refresh or rotation.
+
+**`ICEBERG_CATALOG_ERROR: Cannot obtain metadata` on your personal catalog** (from `get_trino_connection()` or from queries on `{username}`): Trino could not load your personal catalog because Polaris rejected the credential it was created with, usually because your credentials were rotated in another process at the same moment. Call `get_trino_connection()` again, which re-creates the catalog. If the error keeps coming back, contact an administrator: on older Trino versions such a catalog can only be cleared by a Trino restart. Tenant catalogs are not affected.
 
 **A tenant catalog is missing from `SHOW CATALOGS`:** tenant catalogs are provisioned by platform automation, not by your notebook session. Confirm you are a member of the tenant; if you are and the catalog still does not appear, contact an administrator.
 
@@ -158,6 +182,6 @@ A connection object created **before** the expiry does not heal itself: it keeps
 ## Tips
 
 - **Read with Trino, write with Spark**: Trino is ideal for interactive reads; use your Spark session for creating tables and heavy ETL.
-- **Reuse the connection**: create one connection per notebook session and open cursors from it as needed — but recreate it after a KBase re-login or credential refresh (see Troubleshooting). Every `get_trino_connection()` call re-creates your personal catalog on the Trino coordinator (several statements before your first query), so do not call it per query or inside a polling loop.
+- **Reuse the connection**: create one connection per notebook session and open cursors from it as needed — but recreate it after a KBase re-login or credential refresh (see Troubleshooting). Every `get_trino_connection()` call checks, and may re-create, your personal catalog on the Trino coordinator (several statements before your first query), so do not call it per query or inside a polling loop.
 - **Standard SQL**: Trino uses ANSI SQL — some functions differ from Spark SQL (see the [Trino functions reference](https://trino.io/docs/current/functions.html)).
 - **Iceberg everywhere**: the same Iceberg table names (aside from `my`) work in both engines, so SQL can be moved between Spark and Trino with minimal changes. Views are the exception: a view created in Spark can only be read from Spark (see Troubleshooting).
