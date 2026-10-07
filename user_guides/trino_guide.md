@@ -136,26 +136,31 @@ cur.execute("""
 
 ## Troubleshooting
 
-**Queries fail with a credential or authorization error** (e.g., `Access Denied`, S3 403, `unauthorized_client`): recreate the connection first. It refreshes your personal Iceberg catalog with your current credentials, which resolves most stale-credential issues on its own:
+**Queries fail with a credential or authorization error** (e.g., `Access Denied`, S3 403, `unauthorized_client`): work through these steps in order and stop at the first one that fixes it.
 
-```python
-conn = get_trino_connection()
-```
+1. Recreate the connection. It refreshes your personal Iceberg catalog with your current credentials, which resolves most stale-credential issues on its own:
 
-Only if that does not help, rotate your credentials and connect again:
+   ```python
+   conn = get_trino_connection()
+   ```
 
-```python
-refresh_spark_environment(rotate=True)   # rotates credentials, restarts Spark, refreshes the Trino catalog
-conn = get_trino_connection()
-```
+2. If that does not help, refresh your environment and connect again. The refresh returns the status of each step, so you can see which one failed:
 
-`rotate=True` issues **new** S3 and Polaris secrets and revokes the old ones immediately, so every other kernel, script or app still holding the old ones (Spark sessions, boto3/fsspec clients, Trino connections) starts failing until it reconnects. Run it by hand when something is actually broken, never in a loop, a retry handler or several processes at once. To recover a dead Spark session without rotating, restart Spark Connect with your current credentials instead:
+   ```python
+   refresh_spark_environment()
+   conn = get_trino_connection()
+   ```
 
-```python
-from berdl_notebook_utils.spark.connect_server import start_spark_connect_server
-start_spark_connect_server(force_restart=True)
-spark = get_spark_session()
-```
+3. Only as a last resort, rotate your credentials and connect again:
+
+   ```python
+   refresh_spark_environment(rotate=True)   # rotates credentials, restarts Spark, refreshes the Trino catalog
+   conn = get_trino_connection()
+   ```
+
+   `rotate=True` issues **new** S3 and Polaris secrets and revokes the old ones immediately, so every other kernel, script or app still holding the old ones (Spark sessions, boto3/fsspec clients, Trino connections) starts failing until it reconnects. Run it by hand when something is actually broken, never in a loop, a retry handler or several processes at once.
+
+For Spark problems, see [Fixing Spark Problems](user_guide.md#fixing-spark-problems) in the user guide.
 
 **Your KBase login expired and you logged in again:** recreate your connection — once — and you are fully back:
 
@@ -163,7 +168,7 @@ spark = get_spark_session()
 conn = get_trino_connection()        # picks up your fresh token and credentials automatically
 ```
 
-A connection object created **before** the expiry does not heal itself: it keeps sending your old token with every query. Within a few minutes it silently loses access to **tenant** catalogs (queries start failing with access errors) while queries against your **personal** catalog may still work — which makes a stale connection easy to mistake for a permissions problem. There is no way to refresh an existing connection; discard it and call `get_trino_connection()` again. The same rule applies after any credential refresh or rotation.
+A connection object created **before** the expiry does not heal itself: it keeps sending your old token with every query. Within a few minutes it silently loses access to **tenant** catalogs (queries start failing with access errors) while queries against your **personal** catalog may still work — which makes a stale connection easy to mistake for a permissions problem. There is no way to refresh an existing connection; discard it and call `get_trino_connection()` again. The same rule applies after a credential rotation.
 
 **`ICEBERG_CATALOG_ERROR: Cannot obtain metadata` on your personal catalog** (from `get_trino_connection()` or from queries on `{username}`): Trino could not load your personal catalog because Polaris rejected the credential it was created with, usually because your credentials were rotated in another process at the same moment. Call `get_trino_connection()` again, which re-creates the catalog. If the error keeps coming back, contact an administrator: on older Trino versions such a catalog can only be cleared by a Trino restart. Tenant catalogs are not affected.
 
@@ -182,6 +187,6 @@ A connection object created **before** the expiry does not heal itself: it keeps
 ## Tips
 
 - **Read with Trino, write with Spark**: Trino is ideal for interactive reads; use your Spark session for creating tables and heavy ETL.
-- **Reuse the connection**: create one connection per notebook session and open cursors from it as needed — but recreate it after a KBase re-login or credential refresh (see Troubleshooting). Every `get_trino_connection()` call checks, and may re-create, your personal catalog on the Trino coordinator (several statements before your first query), so do not call it per query or inside a polling loop.
+- **Reuse the connection**: create one connection per notebook session and open cursors from it as needed — but recreate it after a KBase re-login or credential rotation (see Troubleshooting). Every `get_trino_connection()` call checks, and may re-create, your personal catalog on the Trino coordinator (several statements before your first query), so do not call it per query or inside a polling loop.
 - **Standard SQL**: Trino uses ANSI SQL — some functions differ from Spark SQL (see the [Trino functions reference](https://trino.io/docs/current/functions.html)).
 - **Iceberg everywhere**: the same Iceberg table names (aside from `my`) work in both engines, so SQL can be moved between Spark and Trino with minimal changes. Views are the exception: a view created in Spark can only be read from Spark (see Troubleshooting).

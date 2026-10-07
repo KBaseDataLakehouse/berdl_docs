@@ -92,10 +92,9 @@ Unqualified names resolve in your personal catalog, so `spark.sql("SELECT * FROM
 
 #### 5.2 Picking Up New Catalog Access
 
-When your catalog access changes while a notebook is already running (a tenant request was approved, or access to an Iceberg namespace was granted or revoked), restart Spark Connect. This re-reads your current credentials and catalog list **without rotating your credentials**:
+When your catalog access changes while a notebook is already running (a tenant request was approved, or access to an Iceberg namespace was granted or revoked), restart Spark Connect. It picks up your current catalog list as it starts:
 
 ```python
-get_credentials()
 start_spark_connect_server(force_restart=True)
 
 # Re-create the Spark session; the restart ends the old one
@@ -103,8 +102,6 @@ spark = get_spark_session()
 ```
 
 The restart ends every Spark session on your server, so run it between operations. Other notebooks you have open also need `spark = get_spark_session()` before their next Spark query. For what else to expect after a tenant request is approved, see [Requesting Tenant Access](requesting-tenant-access.md#after-your-request-is-approved).
-
-Don't rotate your credentials for this. Rotating issues you new S3 and Polaris secrets and revokes the old ones immediately, which breaks anything else still holding them. Keep it for credentials that have actually gone bad (see [Rotating Your Credentials](#rotating-your-credentials)).
 
 #### 5.3 Displaying DataFrames
 
@@ -212,9 +209,17 @@ If you encounter issues with your notebook environment (such as kernel errors, c
 
 > **💡 Tip:** Your files in your home directory are persistent and will not be deleted when you restart your server.
 
+### Fixing Spark Problems
+
+Work through these steps in order and stop at the first one that fixes the problem:
+
+1. [Restart your Spark Connect server](#restarting-your-spark-connect-server-preferred-first-step) — fixes most Spark issues
+2. [Refresh your Spark environment](#refreshing-your-spark-environment) — if the restart didn't help
+3. [Rotate your credentials](#rotating-your-credentials) — last resort only
+
 ### Restarting Your Spark Connect Server (Preferred First Step)
 
-**Preferred fix for most Spark issues — the non-rotating restart.** This re-fetches your current credentials **without rotating them**, so it never invalidates credentials in use elsewhere (other kernels, running scripts, remote connections). Try it before rotating your credentials.
+**Preferred fix for most Spark issues.** It restarts only your Spark Connect server, which picks up your current catalog list as it starts.
 
 Common symptoms it fixes:
 
@@ -226,7 +231,6 @@ Common symptoms it fixes:
 **The fix:** in any notebook cell, run
 
 ```python
-get_credentials()
 start_spark_connect_server(force_restart=True)
 ```
 
@@ -236,15 +240,39 @@ then get a fresh session:
 spark = get_spark_session()
 ```
 
+The restart ends every Spark session on your server; other notebooks you have open also need `spark = get_spark_session()` before their next Spark query.
+
 > **💡 Tip:** If your Iceberg catalogs are still missing afterwards, restart your kernel (**Kernel → Restart Kernel**) and run the same commands again — a kernel restart re-runs the catalog discovery your Spark configuration depends on.
 
-If the problem persists (especially `403 AccessDenied` errors), rotate your credentials (below).
+If the problem persists, refresh your Spark environment (below).
+
+### Refreshing Your Spark Environment
+
+If restarting Spark Connect didn't help, run
+
+```python
+refresh_spark_environment()
+spark = get_spark_session()
+```
+
+This does everything the restart does and also refreshes your Trino catalog. It returns the status of each step, so you can see which one failed:
+
+```python
+{
+  'credentials':      {'status': 'ok', 'username': '<your-username>', 'rotated': False},
+  'polaris_catalog':  {'status': 'ok', 'personal_catalog': 'user_<your-username>', 'tenant_catalogs': [...]},
+  'spark_connect':    {'pid': '...', ...},
+  'trino_catalogs':   {'status': 'ok'},
+}
+```
+
+If the problem persists (especially `403 AccessDenied` errors), rotate your credentials (below) as a last resort.
 
 ### Rotating Your Credentials
 
-> **⚠️ Rotating revokes your old credentials.** `refresh_spark_environment(rotate=True)` issues you **new S3 and Polaris (Iceberg) secrets** and revokes the old ones immediately. Anything else still using the old ones (Spark sessions in other notebooks, `boto3`/`fsspec` clients created before the rotation, open Trino connections, running scripts, remote connections) fails until it reconnects. Try the [non-rotating restart](#restarting-your-spark-connect-server-preferred-first-step) first, and don't rotate just to pick up new tenant or catalog access. Never rotate in a loop, a retry handler or several processes at once.
+> **⚠️ Last resort: rotating revokes your old credentials.** `refresh_spark_environment(rotate=True)` issues you **new S3 and Polaris (Iceberg) secrets** and revokes the old ones immediately. Anything else still using the old ones (Spark sessions in other notebooks, `boto3`/`fsspec` clients created before the rotation, open Trino connections, running scripts, remote connections) fails until it reconnects. [Restart Spark Connect](#restarting-your-spark-connect-server-preferred-first-step) and [refresh your environment](#refreshing-your-spark-environment) first, and don't rotate just to pick up new tenant or catalog access. Never rotate in a loop, a retry handler or several processes at once.
 
-Rotate when your **storage credentials have drifted out of sync** with the platform and the non-rotating restart doesn't fix it — even though you're logged in, every data-touching operation silently fails. Common symptoms:
+Rotate when your **storage credentials have drifted out of sync** with the platform and neither a restart nor a refresh fixes it — even though you're logged in, every data-touching operation silently fails. Common symptoms:
 
 - The **Tenant Browser** spins forever and never renders any folders
 - **Folder favorites** under `FAVORITES` show up empty
