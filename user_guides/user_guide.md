@@ -90,20 +90,21 @@ Unqualified names resolve in your personal catalog, so `spark.sql("SELECT * FROM
 
 > **Note:** Delta Lake and the Hive Metastore have been retired. If a notebook still uses `u_<username>__<db>` or `<tenant>_<db>` names, see [Delta Lake Retirement](iceberg_migration_guide.md) for their new names.
 
-#### 5.2 Refreshing Spark Credentials and Catalog Access
+#### 5.2 Picking Up New Catalog Access
 
-Use `refresh_spark_environment()` when your BERDL credentials or catalog access changes while a notebook is already running. This is commonly needed after access is granted or revoked for an Iceberg namespace, or when you are instructed to refresh Spark before using a newly available catalog or namespace.
+When your catalog access changes while a notebook is already running (a tenant request was approved, or access to an Iceberg namespace was granted or revoked), restart Spark Connect. This re-reads your current credentials and catalog list **without rotating your credentials**:
 
 ```python
-# Refresh credentials, catalog metadata, Spark Connect, and Trino catalogs
-refresh_result = refresh_spark_environment()
-refresh_result
+get_credentials()
+start_spark_connect_server(force_restart=True)
 
-# Re-create the Spark session after the refresh stops any active session
+# Re-create the Spark session; the restart ends the old one
 spark = get_spark_session()
 ```
 
-The function returns a status dictionary showing which refresh steps succeeded, were skipped, or failed. It stops the active Spark session and restarts Spark Connect, so run it between operations and reassign `spark` before continuing with Spark queries. Other notebooks you have open also need `spark = get_spark_session()` before their next Spark query. For what else to expect after a tenant request is approved, see [Requesting Tenant Access](requesting-tenant-access.md#after-your-request-is-approved).
+The restart ends every Spark session on your server, so run it between operations. Other notebooks you have open also need `spark = get_spark_session()` before their next Spark query. For what else to expect after a tenant request is approved, see [Requesting Tenant Access](requesting-tenant-access.md#after-your-request-is-approved).
+
+Don't use `refresh_spark_environment()` for this. It also issues you new S3 and Polaris secrets and revokes the old ones immediately, which breaks anything else still holding them. Keep it for credentials that have actually gone bad (see [Refreshing Your Spark Environment](#refreshing-your-spark-environment)).
 
 #### 5.3 Displaying DataFrames
 
@@ -241,6 +242,8 @@ If the problem persists (especially `403 AccessDenied` errors), use `refresh_spa
 
 ### Refreshing Your Spark Environment
 
+> **⚠️ This rotates your credentials.** `refresh_spark_environment()` issues you **new S3 and Polaris (Iceberg) secrets** and revokes the old ones immediately. Anything else still using the old ones (Spark sessions in other notebooks, `boto3`/`fsspec` clients created before the rotation, open Trino connections, running scripts, remote connections) fails until it reconnects. Try the [non-rotating restart](#restarting-your-spark-connect-server-preferred-first-step) first, and don't use this just to pick up new tenant or catalog access.
+
 Use this when your **storage credentials have drifted out of sync** with the platform — even though you're logged in, every data-touching operation silently fails. Common symptoms:
 
 - The **Tenant Browser** spins forever and never renders any folders
@@ -261,8 +264,8 @@ refresh_spark_environment()
 ```
 
 This single call:
-1. Rotates your S3 credentials with the platform
-2. Rotates your Polaris (Iceberg) credentials
+1. **Rotates your S3 credentials with the platform** (new secret; the old one stops working)
+2. **Rotates your Polaris (Iceberg) credentials** (same)
 3. Re-fetches your Polaris catalog list
 4. Stops the existing Spark session
 5. Restarts the Spark Connect server with the new credentials
