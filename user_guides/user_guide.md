@@ -103,7 +103,7 @@ refresh_result
 spark = get_spark_session()
 ```
 
-The function returns a status dictionary showing which refresh steps succeeded, were skipped, or failed. It stops the active Spark session and restarts Spark Connect, so run it between operations and reassign `spark` before continuing with Spark queries.
+The function returns a status dictionary showing which refresh steps succeeded, were skipped, or failed. It stops the active Spark session and restarts Spark Connect, so run it between operations and reassign `spark` before continuing with Spark queries. Other notebooks you have open also need `spark = get_spark_session()` before their next Spark query. For what else to expect after a tenant request is approved, see [Requesting Tenant Access](requesting-tenant-access.md#after-your-request-is-approved).
 
 #### 5.3 Displaying DataFrames
 
