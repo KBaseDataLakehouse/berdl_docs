@@ -127,8 +127,8 @@ get_my_policies()           # the raw IAM policy, including its s3:prefix condit
 
 ## Credentials are kept current automatically
 
-Your S3 credentials rotate from time to time. You do **not** need to reconfigure
-anything when they do:
+Your S3 credentials change only when they are rotated (by you, or by an
+administrator). You do **not** need to reconfigure anything when they do:
 
 - `~/.aws/credentials` is rewritten with the new secret, and the AWS CLI and
   `boto3` re-read that file on every call — so they always use current
@@ -139,12 +139,15 @@ anything when they do:
 You can also trigger a rotation yourself from any notebook cell:
 
 ```python
-refresh_spark_environment()
+refresh_spark_environment(rotate=True)
 ```
 
 This rotates your S3 (and Polaris) credentials with the platform, refreshes your
 Spark session, and updates `~/.aws/credentials` in the same step. After it runs,
-`aws s3 ls` and `boto3` continue to work with no further action.
+`aws s3 ls` and `boto3` continue to work with no further action. Rotate only
+when you need new credentials (for example, after a secret was exposed): the old
+ones stop working at once in every other notebook and script. Without
+`rotate=True`, `refresh_spark_environment()` keeps your current credentials.
 
 > **Long-running jobs:** a `boto3` client or open file handle created *before* a
 > rotation keeps using the old credentials for the life of that object. Create a

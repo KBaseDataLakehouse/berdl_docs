@@ -105,13 +105,12 @@ Your access is active as soon as the request is approved, but a server that was 
 To use the tenant from Spark in a notebook that is already running:
 
 ```python
-get_credentials()
-start_spark_connect_server(force_restart=True)  # restarts Spark Connect with your new tenant catalogs
+refresh_spark_environment()        # restarts Spark Connect with your new tenant catalogs
 spark = get_spark_session()
-spark.sql("SHOW CATALOGS").show()               # the new tenant is listed
+spark.sql("SHOW CATALOGS").show()  # the new tenant is listed
 ```
 
-This keeps your current credentials. Don't use `refresh_spark_environment()` here: it also rotates your credentials, which breaks other notebooks and scripts still using the old ones.
+This keeps your current credentials. Don't add `rotate=True` here: rotating breaks other notebooks and scripts still using the old credentials.
 
 Other notebooks that are open need `spark = get_spark_session()` again before their next Spark query.
 

@@ -145,15 +145,14 @@ conn = get_trino_connection()
 Only if that does not help, rotate your credentials and connect again:
 
 ```python
-refresh_spark_environment()          # rotates credentials, restarts Spark, refreshes the Trino catalog
+refresh_spark_environment(rotate=True)   # rotates credentials, restarts Spark, refreshes the Trino catalog
 conn = get_trino_connection()
 ```
 
-`refresh_spark_environment()` issues **new** S3 and Polaris secrets and revokes the old ones immediately, so every other kernel, script or app still holding the old ones (Spark sessions, boto3/fsspec clients, Trino connections) starts failing until it reconnects. Run it by hand when something is actually broken, never in a loop, a retry handler or several processes at once. To recover a dead Spark session without rotating, restart Spark Connect with your current credentials instead:
+`rotate=True` issues **new** S3 and Polaris secrets and revokes the old ones immediately, so every other kernel, script or app still holding the old ones (Spark sessions, boto3/fsspec clients, Trino connections) starts failing until it reconnects. Run it by hand when something is actually broken, never in a loop, a retry handler or several processes at once. To recover a dead Spark session without rotating, leave out `rotate=True`; a plain refresh keeps your current credentials:
 
 ```python
-from berdl_notebook_utils.spark.connect_server import start_spark_connect_server
-start_spark_connect_server(force_restart=True)
+refresh_spark_environment()
 spark = get_spark_session()
 ```
 
