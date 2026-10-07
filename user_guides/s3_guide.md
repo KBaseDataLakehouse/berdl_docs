@@ -146,8 +146,7 @@ This rotates your S3 (and Polaris) credentials with the platform, refreshes your
 Spark session, and updates `~/.aws/credentials` in the same step. After it runs,
 `aws s3 ls` and `boto3` continue to work with no further action. Rotate only
 when you need new credentials (for example, after a secret was exposed): the old
-ones stop working at once in every other notebook and script. Without
-`rotate=True`, `refresh_spark_environment()` keeps your current credentials.
+ones stop working at once in every other notebook and script.
 
 > **Long-running jobs:** a `boto3` client or open file handle created *before* a
 > rotation keeps using the old credentials for the life of that object. Create a

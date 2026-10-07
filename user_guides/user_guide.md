@@ -92,10 +92,11 @@ Unqualified names resolve in your personal catalog, so `spark.sql("SELECT * FROM
 
 #### 5.2 Picking Up New Catalog Access
 
-When your catalog access changes while a notebook is already running (a tenant request was approved, or access to an Iceberg namespace was granted or revoked), refresh your Spark environment. This re-reads your current credentials and catalog list and restarts Spark Connect, **without rotating your credentials**:
+When your catalog access changes while a notebook is already running (a tenant request was approved, or access to an Iceberg namespace was granted or revoked), restart Spark Connect. This re-reads your current credentials and catalog list **without rotating your credentials**:
 
 ```python
-refresh_spark_environment()
+get_credentials()
+start_spark_connect_server(force_restart=True)
 
 # Re-create the Spark session; the restart ends the old one
 spark = get_spark_session()
@@ -103,7 +104,7 @@ spark = get_spark_session()
 
 The restart ends every Spark session on your server, so run it between operations. Other notebooks you have open also need `spark = get_spark_session()` before their next Spark query. For what else to expect after a tenant request is approved, see [Requesting Tenant Access](requesting-tenant-access.md#after-your-request-is-approved).
 
-Don't add `rotate=True` for this. Rotating issues you new S3 and Polaris secrets and revokes the old ones immediately, which breaks anything else still holding them. Keep it for credentials that have actually gone bad (see [Rotating Your Credentials](#rotating-your-credentials)).
+Don't rotate your credentials for this. Rotating issues you new S3 and Polaris secrets and revokes the old ones immediately, which breaks anything else still holding them. Keep it for credentials that have actually gone bad (see [Rotating Your Credentials](#rotating-your-credentials)).
 
 #### 5.3 Displaying DataFrames
 
@@ -211,9 +212,9 @@ If you encounter issues with your notebook environment (such as kernel errors, c
 
 > **💡 Tip:** Your files in your home directory are persistent and will not be deleted when you restart your server.
 
-### Refreshing Your Spark Environment
+### Restarting Your Spark Connect Server (Preferred First Step)
 
-**Preferred fix for most Spark issues.** `refresh_spark_environment()` re-reads your current credentials and catalog list, restarts Spark Connect and refreshes your Trino catalog. It does **not** rotate your credentials, so it never breaks anything else using them (other kernels, running scripts, remote connections). It is safe to run at any time.
+**Preferred fix for most Spark issues — the non-rotating restart.** This re-fetches your current credentials **without rotating them**, so it never invalidates credentials in use elsewhere (other kernels, running scripts, remote connections). Try it before rotating your credentials.
 
 Common symptoms it fixes:
 
@@ -221,12 +222,12 @@ Common symptoms it fixes:
 - Queries fail with `SCHEMA_NOT_FOUND` for schemas you know exist
 - `get_spark_session()` fails with `RETRIES_EXCEEDED` or hangs
 - Your Spark session is unresponsive
-- New tenant or catalog access doesn't show up in Spark
 
 **The fix:** in any notebook cell, run
 
 ```python
-refresh_spark_environment()
+get_credentials()
+start_spark_connect_server(force_restart=True)
 ```
 
 then get a fresh session:
@@ -235,26 +236,15 @@ then get a fresh session:
 spark = get_spark_session()
 ```
 
-You should see output similar to:
-
-```python
-{
-  'credentials':      {'status': 'ok', 'username': '<your-username>', 'rotated': False},
-  'polaris_catalog':  {'status': 'ok', 'personal_catalog': 'user_<your-username>', 'tenant_catalogs': [...]},
-  'spark_connect':    {'pid': '...', ...},
-  'trino_catalogs':   {'status': 'ok'},
-}
-```
-
 > **💡 Tip:** If your Iceberg catalogs are still missing afterwards, restart your kernel (**Kernel → Restart Kernel**) and run the same commands again — a kernel restart re-runs the catalog discovery your Spark configuration depends on.
 
 If the problem persists (especially `403 AccessDenied` errors), rotate your credentials (below).
 
 ### Rotating Your Credentials
 
-> **⚠️ Rotating revokes your old credentials.** `refresh_spark_environment(rotate=True)` issues you **new S3 and Polaris (Iceberg) secrets** and revokes the old ones immediately. Anything else still using the old ones (Spark sessions in other notebooks, `boto3`/`fsspec` clients created before the rotation, open Trino connections, running scripts, remote connections) fails until it reconnects. Try a plain [refresh](#refreshing-your-spark-environment) first, and don't rotate just to pick up new tenant or catalog access. Never rotate in a loop, a retry handler or several processes at once.
+> **⚠️ Rotating revokes your old credentials.** `refresh_spark_environment(rotate=True)` issues you **new S3 and Polaris (Iceberg) secrets** and revokes the old ones immediately. Anything else still using the old ones (Spark sessions in other notebooks, `boto3`/`fsspec` clients created before the rotation, open Trino connections, running scripts, remote connections) fails until it reconnects. Try the [non-rotating restart](#restarting-your-spark-connect-server-preferred-first-step) first, and don't rotate just to pick up new tenant or catalog access. Never rotate in a loop, a retry handler or several processes at once.
 
-Rotate when your **storage credentials have drifted out of sync** with the platform and a plain refresh doesn't fix it — even though you're logged in, every data-touching operation silently fails. Common symptoms:
+Rotate when your **storage credentials have drifted out of sync** with the platform and the non-rotating restart doesn't fix it — even though you're logged in, every data-touching operation silently fails. Common symptoms:
 
 - The **Tenant Browser** spins forever and never renders any folders
 - **Folder favorites** under `FAVORITES` show up empty
@@ -281,7 +271,16 @@ This single call:
 5. Restarts the Spark Connect server with the new credentials
 6. Refreshes your Trino dynamic catalogs
 
-The output looks like a plain refresh's, with `'rotated': True` under `'credentials'`.
+You should see output similar to:
+
+```python
+{
+  'credentials':      {'status': 'ok', 'username': '<your-username>', 'rotated': True},
+  'polaris_catalog':  {'status': 'ok', 'personal_catalog': 'user_<your-username>', 'tenant_catalogs': [...]},
+  'spark_connect':    {'pid': '...', ...},
+  'trino_catalogs':   {'status': 'ok'},
+}
+```
 
 **Step 1:** Run `refresh_spark_environment(rotate=True)` in any cell. Wait for it to complete (~15-30 seconds).
 
