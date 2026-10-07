@@ -229,7 +229,7 @@ If the query fails with a permission error, confirm you are a member of the tena
 
 4. **Permission Denied on a tenant table**: Confirm you are a member of the tenant with `get_my_groups()`. Reading needs the tenant or its read-only group; writing needs the tenant itself.
 
-5. **New tenant access not taking effect**: After you are added to a tenant, restart Spark Connect with `start_spark_connect_server(force_restart=True)` and create a new Spark session (see [Requesting Tenant Access](requesting-tenant-access.md#after-your-request-is-approved)). This does not rotate your credentials, unlike `refresh_spark_environment()`.
+5. **New tenant access not taking effect**: After you are added to a tenant, restart Spark Connect with `start_spark_connect_server(force_restart=True)` and create a new Spark session (see [Requesting Tenant Access](requesting-tenant-access.md#after-your-request-is-approved)).
 
 
 ### Getting Help
