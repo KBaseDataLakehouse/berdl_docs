@@ -43,7 +43,7 @@ Click **Submit Request**. Your request will be sent to a KBase admin for approva
 
 ### Step 5: Wait for Approval
 
-Admins will review and approve/deny your request. Approvals typically happen within a few hours during business hours.
+Admins will review and approve/deny your request. Approvals typically happen within a few hours during business hours. Once approved, see [After Your Request Is Approved](#after-your-request-is-approved).
 
 ---
 
@@ -81,12 +81,41 @@ print(result['message'])
 
 ### Step 2: Verify Your Access
 
-After approval, check your group memberships:
+After approval, check your group memberships. Group lists are cached for up to an hour, so ask for a fresh copy:
 
 ```python
-groups = get_my_groups()
+groups = get_my_groups(force_refresh=True)
 print(f"Your groups: {groups.groups}")
 ```
+
+Read-only access shows up as the tenant name followed by `ro` (for example `kbasero`).
+
+---
+
+## After Your Request Is Approved
+
+Your access is active as soon as the request is approved, but a server that was already running needs a moment, or a refresh, to see the new tenant:
+
+| Where | When the new tenant appears |
+|-------|-----------------------------|
+| Trino (`get_trino_connection()`, the AI assistant) | Within about 5 minutes; nothing to do |
+| Spark | After you refresh Spark (below) |
+| File browser (`lakehouse_minio`) | Within about an hour on its own; a server restart shows it right away |
+
+To use the tenant from Spark in a notebook that is already running:
+
+```python
+get_credentials()
+start_spark_connect_server(force_restart=True)  # restarts Spark Connect with your new tenant catalogs
+spark = get_spark_session()
+spark.sql("SHOW CATALOGS").show()               # the new tenant is listed
+```
+
+This keeps your current credentials. Don't use `refresh_spark_environment()` here: it also rotates your credentials, which breaks other notebooks and scripts still using the old ones.
+
+Other notebooks that are open need `spark = get_spark_session()` again before their next Spark query.
+
+The simplest alternative is to restart your server: **File → Hub Control Panel → Stop My Server**, then **Start My Server** (step by step in [Restarting Your Server](user_guide.md#restarting-your-server)). That picks up everything at once (Spark, the file browser and the cached group list) but also restarts your notebooks' kernels.
 
 ---
 
@@ -133,6 +162,9 @@ A: The toolbar dialog shows all available groups. Or use `list_available_groups(
 
 **Q: How long does approval take?**
 A: Approvals are processed when an admin reviews the Slack notification. Typically same-day during business hours.
+
+**Q: I was approved, but I can't see the tenant. What now?**
+A: A running server needs a refresh before Spark sees a new tenant, and the file browser can take up to an hour. See [After Your Request Is Approved](#after-your-request-is-approved).
 
 **Q: Can I request access to multiple tenants?**
 A: Yes, submit a separate request for each tenant.
