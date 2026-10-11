@@ -86,6 +86,8 @@ This automatically configures:
 - Apache Iceberg catalogs (personal `my` + tenant catalogs via Polaris) — `spark.sql("SHOW CATALOGS")` or `list_catalogs()` lists them
 - S3 object storage access
 
+**Where your Spark runs.** Your session runs on a shared compute pool. Executors are taken from the pool when you run something and released after about a minute of idleness, so the first query after a pause takes a few seconds longer while an executor starts; nothing is reserved while you are idle. Your profile sets the executor size and the most executors you can hold at once (Medium: up to 3 executors of 3 cores / 18 GiB; Large: up to 10 of 6 cores / 36 GiB). Classic (non-Connect) Spark sessions and the create-my-cluster helpers are not available on the pool; `get_spark_session()` is the way in. If a query seems to wait for executors for more than a few seconds, note the time and let the BERDL team know.
+
 Unqualified names resolve in your personal catalog, so `spark.sql("SELECT * FROM analysis.my_table")` reads `my.analysis.my_table`; tenant tables are written as `<tenant>.<namespace>.<table>`. The [Tenant SQL Warehouse Guide](tenant_sql_warehouse_guide.md) covers creating tables and Iceberg features such as time travel and schema evolution.
 
 > **Note:** Delta Lake and the Hive Metastore have been retired. If a notebook still uses `u_<username>__<db>` or `<tenant>_<db>` names, see [Delta Lake Retirement](iceberg_migration_guide.md) for their new names.
