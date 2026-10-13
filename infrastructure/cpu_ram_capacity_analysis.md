@@ -28,21 +28,19 @@ A user session has **two Spark parts on two node groups**, both set up by [BERDL
 
 ```mermaid
 flowchart TB
-    subgraph nb["kworker-03 — all notebook pods (168 cores, 1024 GB RAM)"]
-        pod["Notebook pod, one per user<br/>JupyterLab + kernels<br/><b>Spark Connect server = the driver</b><br/>dynamic allocation, FAIR scheduling"]
-        home[("Home directories on local disk<br/>/mnt/state/prod/hub_homes/{username}")]
-        pod --- home
+    subgraph nb["kworker-03: all notebook pods"]
+        pod["Notebook pod, one per user: JupyterLab, kernels, Spark Connect server (the driver)"]
     end
-    subgraph sc["kworker-11 + kworker-18 — shared Spark cluster"]
-        master["Spark Master<br/>kworker-11, 2 CPU / 8 GiB"]
-        workers["26 Spark Workers, 12 cores / 84 GiB each, 13 per node<br/>one pool for all users: a job takes a few executors from it and gives them back<br/>at most the profile's cap per user (3 Medium or 10 Large executors); a worker fits 4 Medium or 2 Large"]
+    subgraph sc["kworker-11 + kworker-18: shared Spark cluster"]
+        master["Spark Master"]
+        workers["26 workers of 12 cores / 84 GiB: one executor pool for all users"]
         master --> workers
     end
-    pod -- "spark://sharedsparkclustermaster:7077<br/>executors requested when a job runs,<br/>released 60 s after the last task<br/>(10 min with shuffle data, 15 min with cached blocks)" --> master
+    pod -- "executors on demand, up to the profile's cap" --> master
 ```
 
-- The **driver** is the Spark Connect server inside the notebook pod; kernels, the data API and remote clients (through the Spark Connect proxy) talk to it over gRPC. Its memory is part of the pod's limit.
-- **Executors** are launched on the shared workers when the user's job starts and released a minute after it ends (10 minutes if they hold shuffle data, 15 if they hold cached blocks). An idle user holds nothing on the cluster.
+- The **driver** is the Spark Connect server inside the notebook pod; kernels, the data API and remote clients (through the Spark Connect proxy) talk to it over gRPC. Its memory is part of the pod's limit. Home directories are on the node's local disk (`/mnt/state/prod/hub_homes/{username}`).
+- **Executors** come from one pool shared by all users: 26 workers of 12 cores / 84 GiB, 13 per node, each fitting 4 Medium or 2 Large executors. A user's job takes executors from the pool up to the profile's cap (3 Medium or 10 Large) and releases them a minute after the last task (10 minutes if they hold shuffle data, 15 if they hold cached blocks). An idle user holds nothing on the cluster; the master (kworker-11, 2 CPU / 8 GiB) keeps file-based recovery.
 - Other users of the same cluster: the data API's standalone applications (section 3.4) and the event processor.
 - **Trino** (section 5) runs on its own node and answers SQL for notebooks and for the data API, which defaults to it.
 
@@ -147,9 +145,8 @@ The [datalake-mcp-server](https://github.com/KBaseDataLakehouse/datalake-mcp-ser
 | Question | Answer | Why |
 |---|---:|---|
 | Concurrent notebook users (servers running) | **~160**, either profile | kworker-03's 1-core guarantee per pod (section 2); the shared cluster adds no per-user limit, an idle user holds no executors there |
-| Users running Spark jobs at the same instant before anyone waits | **34 Medium** or **5 Large** at full cap, or any mix of 104 Medium-sized units | the pool is 312 cores: 104 executors of 3 cores or 52 of 6 (section 3.3) |
+| Users running Spark jobs at the same instant **before anyone waits** | **34 Medium** or **5 Large** at full cap, or any mix of 104 Medium-sized units | the pool is 312 cores: 104 executors of 3 cores or 52 of 6 (section 3.3) |
 | What happens past that | jobs **wait** for executors, they do not fail | the master grants executors as others release them (60 s after a job's last task); a waiting job's cell simply takes longer |
-| Measured so far at every-user scale | p95 12 executors held at once, peak 18, with 19 notebooks | under a sixth of the pool's slots (section 3.3) |
 | Trino concurrent queries | 40–96 by load; 50 global, 10 per user by resource groups | kworker-12 (section 5) |
 
 So **160 users of the Large profile can all be connected**: each has its driver in its own pod and an application registered on the master holding nothing while idle. If all 160 ran a job at the same instant, the master would grant the 52 Large executors to the first requests, one per user, and the other users' jobs would wait their turn; with executors released a minute after each job's last task, the pool turns over at the pace of the jobs. In practice the measured simultaneous demand has been a dozen executors, so nobody has waited more than a few minutes in total over two days.
