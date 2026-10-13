@@ -183,9 +183,12 @@ your own machine, you need the KBase SSH tunnel and your S3 keys.
 **2. Open an SSH tunnel** to KBase (a SOCKS5 proxy on port 1338):
 
 ```bash
-ssh -f -D 1338 -N <your_kbase_username>@login.kbase.us
+ssh -f -D 1338 -N <ac.anl_username>@login.kbase.us
 ```
 
+- Log in with your ANL CELS account (for example `ac.jsmith`), not your KBase
+  username. If you do not have access to `login.kbase.us`, contact the KBase
+  System Admin team.
 - `-f` runs it in the background, `-D 1338` opens the SOCKS proxy, `-N` forwards
   ports only. Use a different local port if 1338 is taken.
 - Verify with `ps aux | grep "ssh -f -D 1338"`; stop it later with `kill <PID>`.

@@ -64,7 +64,7 @@ ssh -f -D 1338 -N <ac.anl_username>@login.kbase.us
 **What this command does:**
 * `-f`: Runs SSH in the background
 * `-D 1338`: Creates a SOCKS5 proxy on port 1338
-* `<ac.anl_username>`: Replace with your actual username
+* `<ac.anl_username>`: Replace with your ANL CELS account (for example `ac.jsmith`), not your KBase username
 * `-N`: No remote command is executed — useful for pure port-forwarding connections
 
 > **⚠️ Note:** If port `1338` is already in use on your system, you can replace it with another free port (e.g., 1080).
