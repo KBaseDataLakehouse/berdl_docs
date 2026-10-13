@@ -24,20 +24,23 @@
 
 ### 1.2 User Workload Components
 
-A user session has **two Spark parts on two node groups**, both set up by [BERDL_JupyterHub](https://github.com/KBaseDataLakehouse/BERDL_JupyterHub) at spawn: the notebook pod, which also hosts the Spark driver, and executors taken from the shared cluster on demand.
+A user session has **two Spark parts on two node groups**, both set up by [BERDL_JupyterHub](https://github.com/KBaseDataLakehouse/BERDL_JupyterHub/blob/main/berdlhub/config/profiles.py#L36) at spawn (the profile definitions are in `berdlhub/config/profiles.py`): the notebook pod, which also hosts the Spark driver, and executors taken from the shared cluster on demand.
 
 ```mermaid
-%%{init: {"flowchart": {"htmlLabels": false, "nodeSpacing": 40, "rankSpacing": 50}}}%%
-flowchart TB
-    subgraph nb["kworker-03: all notebook pods"]
-        pod["Notebook pod: JupyterLab, kernels, Spark Connect driver"]
+graph TD
+    subgraph NotebookNode ["kworker-03: notebook pods"]
+        Pod[Notebook pod, one per user]
+        Driver[Spark Connect server = driver]
+        Pod --- Driver
     end
-    subgraph sc["kworker-11 + kworker-18: shared Spark cluster"]
-        master["Spark Master"]
-        workers["26 workers, 12 cores / 84 GiB each: one pool for all users"]
-        master --> workers
+    subgraph SharedCluster ["kworker-11 + kworker-18: shared Spark cluster"]
+        Master[Spark Master]
+        Workers[26 workers, 12 cores / 84 GiB each]
+        Pool[one executor pool for all users]
+        Master --> Workers
+        Workers --- Pool
     end
-    pod -- "executors on demand, up to the profile cap" --> master
+    Driver -->|executors on demand, up to the profile cap| Master
 ```
 
 - The **driver** is the Spark Connect server inside the notebook pod; kernels, the data API and remote clients (through the Spark Connect proxy) talk to it over gRPC. Its memory is part of the pod's limit. Home directories are on the node's local disk (`/mnt/state/prod/hub_homes/{username}`).
@@ -47,7 +50,7 @@ flowchart TB
 
 ### 1.3 Profiles
 
-A user picks **Medium** or **Large** at spawn. The profile sets the notebook pod's limits, the driver's size and the executor shape and cap on the shared cluster; the executor shapes match what a dedicated cluster of that profile used to give, so no task that fit before runs out of memory now.
+A user picks **Medium** or **Large** at spawn ([profile definitions](https://github.com/KBaseDataLakehouse/BERDL_JupyterHub/blob/main/berdlhub/config/profiles.py#L36)). The profile sets the notebook pod's limits, the driver's size and the executor shape and cap on the shared cluster; the executor shapes match what a dedicated cluster of that profile used to give, so no task that fit before runs out of memory now.
 
 | | Medium (default) | Large |
 |---|---|---|
