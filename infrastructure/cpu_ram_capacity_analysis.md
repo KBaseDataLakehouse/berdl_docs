@@ -27,16 +27,17 @@
 A user session has **two Spark parts on two node groups**, both set up by [BERDL_JupyterHub](https://github.com/KBaseDataLakehouse/BERDL_JupyterHub) at spawn: the notebook pod, which also hosts the Spark driver, and executors taken from the shared cluster on demand.
 
 ```mermaid
+%%{init: {"flowchart": {"htmlLabels": false, "nodeSpacing": 40, "rankSpacing": 50}}}%%
 flowchart TB
     subgraph nb["kworker-03: all notebook pods"]
-        pod["Notebook pod, one per user: JupyterLab, kernels, Spark Connect server (the driver)"]
+        pod["Notebook pod: JupyterLab, kernels, Spark Connect driver"]
     end
     subgraph sc["kworker-11 + kworker-18: shared Spark cluster"]
         master["Spark Master"]
-        workers["26 workers of 12 cores / 84 GiB: one executor pool for all users"]
+        workers["26 workers, 12 cores / 84 GiB each: one pool for all users"]
         master --> workers
     end
-    pod -- "executors on demand, up to the profile's cap" --> master
+    pod -- "executors on demand, up to the profile cap" --> master
 ```
 
 - The **driver** is the Spark Connect server inside the notebook pod; kernels, the data API and remote clients (through the Spark Connect proxy) talk to it over gRPC. Its memory is part of the pod's limit. Home directories are on the node's local disk (`/mnt/state/prod/hub_homes/{username}`).
@@ -145,7 +146,7 @@ The [datalake-mcp-server](https://github.com/KBaseDataLakehouse/datalake-mcp-ser
 | Question | Answer | Why |
 |---|---:|---|
 | Concurrent notebook users (servers running) | **~160**, either profile | kworker-03's 1-core guarantee per pod (section 2); the shared cluster adds no per-user limit, an idle user holds no executors there |
-| Users running Spark jobs at the same instant **before anyone waits** | **34 Medium** or **5 Large** at full cap, or any mix of 104 Medium-sized units | the pool is 312 cores: 104 executors of 3 cores or 52 of 6 (section 3.3) |
+| Users running Spark jobs at the same instant **before anyone waits** | **34 Medium** or **5 Large** at full cap, or any mix whose bursts add up to 312 cores (a Medium user at full cap uses 9, a Large user 60) | the pool is 312 cores: 104 executors of 3 cores or 52 of 6 (section 3.3) |
 | What happens past that | jobs **wait** for executors, they do not fail | the master grants executors as others release them (60 s after a job's last task); a waiting job's cell simply takes longer |
 | Trino concurrent queries | 40–96 by load; 50 global, 10 per user by resource groups | kworker-12 (section 5) |
 
