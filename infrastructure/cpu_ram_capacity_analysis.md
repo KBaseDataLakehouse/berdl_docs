@@ -1,7 +1,5 @@
 # KBERDL CPU/RAM Capacity Analysis
 
-> **Updated 2026-10-13.** Every notebook user's Spark runs on the shared cluster since 2026-10-11 (section 3; design in [shared_spark_compute_design.md](shared_spark_compute_design.md)). The dedicated per-user clusters that preceded it remain only as the rollback path (section 6); their nodes are being retired into the shared cluster.
-
 ---
 
 ## 1. Current State
