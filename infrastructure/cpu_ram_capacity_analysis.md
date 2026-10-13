@@ -1,5 +1,7 @@
 # KBERDL CPU/RAM Capacity Analysis
 
+> **Updated 2026-10-13.** Notebook Spark runs on the shared cluster for every user since 2026-10-11 (section 5, designed in [shared_spark_compute_design.md](shared_spark_compute_design.md)). Sections 1.3, 3 and 4 describe the per-user cluster model, which remains only as the rollback path; the dedicated pool nodes are being retired into the shared cluster.
+
 ---
 
 ## 1. Current State
@@ -11,16 +13,16 @@
 | kworker-01 | 168 | 1024 GB | 100 TB | Dev/Staging Services |
 | kworker-02 | 168 | 1024 GB | 100 TB | Prod Services |
 | kworker-03 | 168 | 1024 GB | 100 TB | All user notebook pods |
-| kworker-05 – 10 | 168 each | 1024 GB each | 100 TB each | Per-user Spark clusters (master + workers) |
-| kworker-11 | 168 | 1024 GB | 100 TB | Shared Spark cluster (master + workers) |
+| kworker-05 – 10 | 168 each | 1024 GB each | 100 TB each | Per-user Spark clusters (retiring: no new cluster since 2026-10-11; nodes move to the shared cluster in pairs) |
+| kworker-11 | 168 | 1024 GB | 100 TB | Shared Spark cluster (master + 13 workers) |
 | kworker-12 | 168 | 1024 GB | 100 TB | Trino cluster (coordinator + 4 workers) |
 | kworker-13 | 168 | 1024 GB | 100 TB | Other workloads |
-| kworker-14 – 17 | 168 each | 1024 GB each | 100 TB each | Per-user Spark clusters (master + workers) |
-| kworker-18 | 168 | 1024 GB | 100 TB | Shared Spark cluster (workers) |
+| kworker-14 – 17 | 168 each | 1024 GB each | 100 TB each | Per-user Spark clusters (retiring, as above) |
+| kworker-18 | 168 | 1024 GB | 100 TB | Shared Spark cluster (13 workers) |
 | kworker-19 | 168 | 1024 GB | 100 TB | Other workloads |
 | kworker-20 | 168 | 1024 GB | 100 TB | Other workloads |
 
-**Spark cluster pool: 10 nodes** (kworker-05–10, kworker-14–17) — **1,680 cores, 10,240 GB RAM total**
+**Dedicated Spark pool: 10 nodes** (kworker-05–10, kworker-14–17) — **1,680 cores, 10,240 GB RAM total**, being retired: four clusters started before 2026-10-11 remain, and the nodes join the shared cluster a pair at a time once they are empty.
 
 ### 1.2 User Workload Components
 
@@ -52,6 +54,8 @@ Each user session spawns **three components** across two node groups (managed by
 └──────────────────────────────────────────────────────────────┘
 ```
 
+> Since 2026-10-11 the per-user master/workers box applies only to the clusters started before that date. A notebook's Spark Connect server, which runs inside the pod on kworker-03, submits to the shared cluster (section 5) and takes executors from it on demand.
+
 ### 1.3 Profile Definitions
 
 Two profiles are available to users. Both profiles use **identical notebook pods** — the differentiation is entirely in the Spark cluster size.
@@ -63,6 +67,8 @@ Two profiles are available to users. Both profiles use **identical notebook pods
 | Notebook pod | 1 core | 24 GB | 6 GB |
 
 > No `cpu_limit` is set — pods can burst to use available CPU on the node.
+
+On the shared cluster a profile is an executor shape and a cap, not a set of worker pods: Medium = up to 3 executors of 3 cores / 18 GiB heap with a 1 core / 4 GiB driver, Large = up to 10 executors of 6 cores / 36 GiB heap with a 2 core / 8 GiB driver. The driver is the Spark Connect server in the notebook pod; executors are taken from the pool when a job runs and released 60 s after it ends. The worker-pod shapes below are what a dedicated cluster of each profile was, kept for the rollback path.
 
 #### Medium Spark Cluster
 
@@ -114,9 +120,11 @@ Two profiles are available to users. Both profiles use **identical notebook pods
 
 ---
 
-## 3. Per-User Spark Cluster Capacity (kworker-05–10, 14–17)
+## 3. Per-User Spark Cluster Capacity (kworker-05–10, 14–17) — rollback path only
 
-Per-user Spark clusters (managed by [spark_cluster_manager](https://github.com/KBaseDataLakehouse/spark_cluster_manager)) run on **10 dedicated nodes** (kworker-05 through kworker-10, kworker-14 through kworker-17). Each node has 168 cores and 1024 GB RAM.
+> This section sizes the dedicated-cluster model that was the default until 2026-10-11. It applies again only if the hub's shared-mode gate is rolled back. The live capacity model is section 5.
+
+Per-user Spark clusters (managed by [spark_cluster_manager](https://github.com/KBaseDataLakehouse/spark_cluster_manager)) ran on **10 dedicated nodes** (kworker-05 through kworker-10, kworker-14 through kworker-17). Each node has 168 cores and 1024 GB RAM.
 
 **Total Spark pool: 1,680 cores, 10,240 GB RAM**
 
@@ -161,57 +169,58 @@ Per-user Spark clusters (managed by [spark_cluster_manager](https://github.com/K
 | Medium | 160 users | 165 users | **160 users** (notebook-limited) |
 | Large | 160 users | 25 users | **25 users** (Spark-limited) |
 
-> Medium is now sized so the Spark pool covers all 160 notebook users; kworker-03 (notebook pods) is the binding constraint and is at its ceiling (160/160 cores, 960/974 GB guaranteed — no headroom).
+> Medium was sized so the dedicated pool covered all 160 notebook users; kworker-03 (notebook pods) is the binding constraint and is at its ceiling (160/160 cores, 960/974 GB guaranteed — no headroom).
+>
+> **With the shared cluster (every user since 2026-10-11)** the Spark side is no longer a per-user reservation: the pool holds what is in use at the same moment. Two nodes give 104 Medium-sized executor slots; measured over the first two days with 19 users on the pool, the p95 of executors held at once was 12 and the peak 18, so the notebook node, not Spark, remains the limit on concurrent users (section 5).
 
 ---
 
 ## 5. Shared Spark Cluster (kworker-11 + kworker-18)
 
-A shared Spark cluster spans **2 nodes** for multi-tenant workloads (e.g., data API, event processor, ad-hoc queries).
+The shared Spark standalone cluster carries every notebook user's Spark since 2026-10-11, plus the data API's standalone applications and the event processor. Design and operations: [shared_spark_compute_design.md](shared_spark_compute_design.md). Re-cut to the shape below on 2026-10-03.
 
 ### 5.1 Cluster Configuration
 
 | Component | Cores | Memory | Replicas | Node |
 |-----------|------:|-------:|---------:|------|
-| Spark Master | 1 | 2 GiB | 1 | kworker-11 |
-| Spark Workers | 8 each | 50 GiB each | 40 | kworker-11 + kworker-18 |
-| **Total** | **321** | **2,002 GiB** | | |
+| Spark Master | 2 | 8 GiB (4 GiB daemon heap) | 1 | kworker-11 |
+| Spark Workers | 12 each | 84 GiB each (`SPARK_WORKER_MEMORY=72g`) | 26 (13 per node) | kworker-11 + kworker-18 |
+| **Total** | **314** | **2,192 GiB** | | **312 worker cores, 1,872 GiB of executor memory** |
 
-> Workers use `nodeAffinity` to schedule across both kworker-11 and kworker-18. Each node fits ~20 workers (20 × 8c = 160c, 20 × 50G = 1,000G per node).
+> The master keeps `FILESYSTEM` recovery on a host path, so a restart re-adopts running applications, and `spark.deploy.defaultCores=8` bounds a session that sets no core limit. Workers are placed by node affinity on the two tainted nodes; 13 per node uses 156 of 168 cores and leaves memory for the node's own daemons.
 >
-> 8 cores/worker allows Spark to run 2 executors of 4 cores each per worker — staying within the recommended 2–5 cores/executor sweet spot.
+> 12 cores / 72 GiB per worker is a multiple of both executor shapes: a worker holds 4 Medium executors (3 cores / 18 GiB), 2 Large (6 cores / 36 GiB) or 2 Medium + 1 Large, with nothing stranded. Local disk I/O (shuffle, spill, cached blocks) is encrypted per application (`spark.io.encryption.enabled`, since 2026-10-11) because every application's executors share the worker's uid.
 
-### 5.2 Resource Utilization
+### 5.2 Resource Utilization (requests on the two nodes)
 
-| Resource | Total (2 nodes) | Used | Utilization |
-|----------|----------------:|-----:|------------:|
-| CPU | 336 cores | 321 cores | **95.5%** |
-| RAM | 2,048 GB | 2,002 GiB | **97.8%** |
+| Resource | Allocatable (2 nodes) | Requested | Utilization |
+|----------|----------------------:|----------:|------------:|
+| CPU | 336 cores | 314 cores | **93.5%** |
+| RAM | 2,266 GiB | 2,192 GiB | **96.7%** |
 
-### 5.3 Data API Executor Configuration
+### 5.3 Capacity Model (what the pool serves)
 
-The [datalake-mcp-server](https://github.com/KBaseDataLakehouse/datalake-mcp-server) (data API) connects to the shared cluster. Each data API Spark session requests:
+| | Medium units (3 cores / 18 GiB) | Large units (6 cores / 36 GiB) |
+|---|---:|---:|
+| slots on two nodes | 104 | 52 |
+| one user at full burst | 3 (Medium cap) | 10 (Large cap, 20 Medium units) |
+| each added node (13 workers) | +52 | +26 |
+
+Demand is measured, not reserved. Over the first two days with every user on the pool (19 notebooks at once at most): peak 84 of 312 cores in use, p95 of 12 executors held at once across all users, the worst user short of an executor for 18 minutes in total, first executor after idle in 2.7 s at the median and 2.8 s at the 95th percentile, 3,497 executor endings all normal. Growing the pool is one Deployment edit per node (design doc, section 4); the five idle nodes (kworker-01, 04, 13, 19, 20) and, once empty, the ten retiring pool nodes are the candidates.
+
+### 5.4 Data API Executor Configuration
+
+The [datalake-mcp-server](https://github.com/KBaseDataLakehouse/datalake-mcp-server) (data API) answers through Trino by default since 2026-10-01. Its Spark path uses the caller's own notebook Connect server when one is running, and otherwise a standalone application on the shared cluster:
 
 | Setting | Value | Description |
 |---------|-------|-------------|
 | `SPARK_WORKER_CORES` | 2 | Cores per executor |
 | `SPARK_WORKER_COUNT` | 2 | Executors per job |
 | `SPARK_WORKER_MEMORY` | 16 GiB | Memory per executor |
-| `STANDALONE_SPARK_POOL_SIZE` | 8 | Concurrent sessions per replica |
+| `STANDALONE_SPARK_POOL_SIZE` | 8 | Concurrent standalone sessions per replica |
 | **Per-job total** | **4 cores, 32 GiB** | 2 executors × (2c, 16G) |
 
-**Executor packing per worker (8c, 50G):**
-- CPU: 8 / 2 = 4 executors
-- RAM: 50 / 16 = 3 executors
-- **3 executors per worker** (memory-bound) → 40 workers × 3 = **120 executor slots**
-- 120 slots / 2 executors per job = **60 max concurrent jobs**
-
-**Data API concurrency:** 8 replicas × pool size 8 = 64 max sessions (≥ 60)
-
-| At 60 concurrent jobs | Used | Available | Utilization |
-|-----------------------|-----:|----------:|------------:|
-| CPU | 240 cores | 320 cores | **75%** |
-| RAM | 1,920 GiB | 2,000 GiB | **96%** |
+**Executor packing per worker (12c, 72G):** 6 by CPU, 4 by memory → **4 executors per worker**, 26 workers × 4 = **104 executor slots**, or **52 concurrent standalone jobs** against 8 replicas × pool size 8 = 64 sessions. In practice the standalone path serves a handful of calls a day; the notebook applications set the pool's load.
 
 ---
 

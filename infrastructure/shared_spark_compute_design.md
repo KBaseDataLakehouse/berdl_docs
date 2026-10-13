@@ -2,13 +2,15 @@
 
 How BERDL schedules Spark for notebook users on the shared cluster: the cluster shape, why it is cut the way it is, what it means for a user, and how to grow or shrink it for a workshop or a demo.
 
-This document describes the target design. It supersedes section 5 (Shared Spark Cluster) of [cpu_ram_capacity_analysis.md](cpu_ram_capacity_analysis.md) once the re-cut below is applied; the per-user cluster sections of that document stay valid for users who are not yet on the shared cluster.
+This document describes the cluster as deployed: the worker re-cut of 2026-10-03, a staff cohort from 2026-10-05, and every notebook user since 2026-10-11 15:33 UTC. It supersedes section 5 (Shared Spark Cluster) of [cpu_ram_capacity_analysis.md](cpu_ram_capacity_analysis.md); that document keeps the per-user cluster model only because it is the rollback path.
+
+Updated 2026-10-13.
 
 ---
 
 ## 1. Why the change
 
-Today every notebook user gets a dedicated Spark cluster: a Medium profile is 3 worker pods of 3 cores / 22 GB each, a Large profile 10 worker pods of 6 cores / 43 GB, all held for the life of the notebook server. Measured over three days in prod (driver gauges written once a minute by the notebook watchdog):
+Until 2026-10-11 every notebook user got a dedicated Spark cluster: a Medium profile was 3 worker pods of 3 cores / 22 GB each, a Large profile 10 worker pods of 6 cores / 43 GB, all held for the life of the notebook server. Measured over three days in prod before the change (driver gauges written once a minute by the notebook watchdog):
 
 | what | measured |
 |---|---|
@@ -22,11 +24,25 @@ Today every notebook user gets a dedicated Spark cluster: a Medium profile is 3 
 
 Dynamic allocation in the notebook image already lets a server acquire executors when a job starts and release them 60 s after it ends. On a dedicated cluster that saves nothing: the worker pods are still reserved. On a shared cluster it means the pool only has to hold what is in use at the same moment, which is a fifth to a tenth of what the dedicated clusters reserve.
 
+**What the first days of the shared cluster showed** (prod, every user, 2026-10-11 to 2026-10-13; the staff cohort before that from 2026-10-05):
+
+| what | measured |
+|---|---|
+| notebooks on the shared cluster | 19 of 23 running; every new server since the change |
+| peak of the pool | 84 of 312 cores, 19 applications at once |
+| executors held at once (all users) | p50 6, p95 12, max 18 |
+| time a user wanted more executors than it held | at most 18 minutes in two days, always one executor short |
+| wait for the first executor after idle | p50 2.7 s, p95 2.8 s, worst 8.9 s (5,299 cold starts over six days) |
+| executor endings on the shared workers | 3,497 normal releases, none crashed, none hit the 84 GiB worker limit |
+| master and workers | 0 restarts since the re-cut |
+
 ## 2. The design
 
 ### 2.1 Users keep Medium and Large
 
-There is no new profile. A user picks Medium or Large exactly as before. For users whose KBase role is listed in the hub's `DYNAMIC_ALLOCATION_ROLES` (staff first, every role once the rollout is complete), and while the hub's `SHARED_SPARK_MASTER_URL` is set, the hub does not ask the Spark cluster manager for a dedicated cluster; it points the user's in-pod Spark Connect server at the shared master instead and sets `BERDL_SPARK_MODE=shared`. Unsetting the URL sends role holders back to dynamic allocation on dedicated clusters at their next spawn; removing a role sends its holders back to static dedicated clusters. The profile's sizing variables (`SPARK_WORKER_COUNT`, `SPARK_WORKER_CORES`, `SPARK_WORKER_MEMORY`, `SPARK_MASTER_*`) are passed through unchanged, so the notebook writes the same executor size it writes today and `SPARK_WORKER_COUNT` becomes the executor cap.
+There is no new profile. A user picks Medium or Large exactly as before. The hub's `DYNAMIC_ALLOCATION_ROLES` names `BERDL_USER`, every notebook user, since 2026-10-11 (a staff cohort from 2026-10-05), and its `SHARED_SPARK_MASTER_URL` points at the shared master. With both set the hub does not ask the Spark cluster manager for a dedicated cluster: it points the user's in-pod Spark Connect server at the shared master, passes the profile's executor shape and cap unchanged, and the server takes executors from the pool on demand. Nobody gets a dedicated cluster any more (decision 2026-10-11); the cluster-manager path remains only as the rollback: narrow the roles or unset the URL, and the next spawn builds a dedicated cluster again. A server that started before the change keeps its dedicated cluster until the user restarts it.
+
+In shared mode the notebook helpers refuse a classic (non-Connect) session and the create-my-cluster helpers; `get_spark_session()` is the way in. The MCP server's standalone applications and the event processor submit their own applications to the same master.
 
 ### 2.2 Executor shapes are unchanged, and that is the point
 
@@ -55,6 +71,10 @@ Two nodes (kworker-11 and kworker-18) give **26 workers, 312 cores, 2,184 GiB: 1
 | `shuffleTracking.timeout` / `cachedExecutorIdleTimeout` | 10 min / 15 min | executors holding shuffle or cached data linger a little longer; neither limited anything in the measurement |
 | Spark Connect session timeout | 10 h | unchanged; lowering it breaks open notebooks after a break |
 | scheduler | FAIR | several queries from one user share the user's executors evenly |
+| `spark.io.encryption.enabled` | true (since 2026-10-11) | every application's executors run under one uid on a shared worker, so one user's code could read another's shuffle, spill and cached-block files; with this on they are ciphertext under a per-application key held only in the driver's and executors' memory. Event logs, the UI and executor logs are unchanged; no measurable cost on a 40-million-row shuffle |
+| `spark.authenticate` | off (decision 2026-10-03) | on a standalone cluster it is one secret held by every user's driver and executors, so it separates nobody |
+| master port 7077 | open to the cluster (decision 2026-10-11) | anyone who can reach the master may start a Spark session; the per-application cap and `spark.deploy.defaultCores=8` (the bound on sessions that set no limit) are the only limits |
+| master | 2 CPU / 8 GiB, 4 GiB daemon heap, `FILESYSTEM` recovery on a host path | a master restart re-adopts running applications; tested on prod on 2026-10-03 |
 
 Known and accepted: a server whose executors hold cached data stays allocated for as long as some client keeps running small jobs on it (KIND's periodic poll, or a user's own script). Those users hold their cap continuously and are counted at cap in capacity planning.
 
@@ -64,7 +84,7 @@ Known and accepted: a server whose executors hold cached data stays allocated fo
 |---|---|---|
 | kworker-11, kworker-18 | shared Spark cluster | tainted `environments=prodsparkworker:NoSchedule`, so only the shared workers and the master land there |
 | kworker-03 | all notebook pods | unchanged; the Spark Connect server, which is the driver, runs inside the notebook pod |
-| kworker-05 to 10, 14 to 17 | dedicated per-user clusters | emptied progressively as roles move to the shared cluster; each sits at about a third of its requests today |
+| kworker-05 to 10, 14 to 17 | the retiring dedicated pool | no new dedicated cluster has been created since 2026-10-11; four clusters started before the change remain until their users restart, then the nodes move to the shared cluster a pair at a time (section 4.2) |
 | kworker-01, 04, 13, 19, 20 | idle apart from a monitoring agent | the first candidates for growing the shared cluster |
 | kworker-12 | Trino | coordinator plus 4 workers of 40 cores / 240 GiB |
 | kworker-02 | platform services | MMS, MCP, Polaris, Hive metastore, event processor, PgBouncer, Postgres |
@@ -72,15 +92,17 @@ Known and accepted: a server whose executors hold cached data stays allocated fo
 ### 2.6 What a user notices
 
 - No dedicated cluster is created at spawn, so the server is ready sooner.
-- The first query after an idle period waits a few seconds for executors to come up; cached DataFrames and shuffle files are dropped after the idle timeouts and recomputed on the next use.
+- The first query after an idle period waits for executors to come up: 2.7 s at the median and 2.8 s at the 95th percentile measured over 5,299 such starts; cached DataFrames and shuffle files are dropped after the idle timeouts and recomputed on the next use.
+- Classic (non-Connect) sessions and the create-my-cluster helpers are refused; `get_spark_session()` is the entry point.
 - Executor sizes and caps are the ones they had. When the pool is busy, executors arrive late and the job waits rather than fails; another user's heavy job can slow theirs.
 - The shared master UI lists every user's application name; it is not exposed to users.
 
 ## 3. Reading the cluster
 
-- **Master UI / JSON**: `sharedsparkclustermaster.prod:8090/json/` (port-forward the Service; see the Kubernetes testing runbook). `workers` should list 26 (13 per node) with 12 cores / 72 GiB each; `activeapps` carries one application per connected server named `Spark Connect server (<user>)` with its current cores; `WAITING` with 0 cores is the idle state of a dynamic-allocation server, not a fault.
+- **Master UI / JSON**: `sharedsparkclustermaster.prod:8090/json/`, readable without a port-forward through the API server proxy (`kubectl get --raw /api/v1/namespaces/prod/services/sharedsparkclustermaster:8090/proxy/json/`; see the Kubernetes testing runbook). `workers` should list 26 (13 per node) with 12 cores / 72 GiB each; `activeapps` carries one application per connected server named `Spark Connect server (<user>)` with its current cores; `WAITING` with 0 cores is the idle state of a dynamic-allocation server, not a fault.
 - **`spark_cluster_usage`** (SCM reporter, VictoriaLogs): one record per minute per cluster, including `shared`, with cores allocated and `waiting_apps`. A rising count of WAITING applications *with pending executor requests* is the signal that the pool is full.
-- **`spark_da_usage`** (notebook watchdog): per-server executors held and tasks pending, once a minute; the source of the duty-cycle numbers above.
+- **`spark_da_usage`** (notebook watchdog): per-server executors held, wanted and needed, once a minute; the source of the duty-cycle numbers above. A minute in which a server wants more executors than it holds is the queue signal; an idle server registered as `WAITING` with 0 cores is not.
+- **The prod status page** lists who is on the shared cluster and what each holds ("Resources by user"), and the per-user sweep guide has the cluster's checks (master gauges, workers, disk, lifecycle logs, waiting and headroom).
 
 ## 4. Growing the cluster for a workshop or a demo
 
@@ -101,7 +123,7 @@ Growing the cluster is a change to one Deployment, `sharedsparkclusterworker` in
    ```
 
    The scheduler places the 13 new pods on the only node in the list with room. Confirm the placement with `kubectl -n prod get pods -l app.kubernetes.io/name=sharedsparkclusterworker -o wide` and the registration on the master JSON (`workers` count, all `ALIVE`).
-4. **Mirror the change into the manifests.** The Deployment is declared in the GitLab `manifests` repo (`definitions/sharedsparkcluster/overlays/prod`). A direct edit works, but the next `kubectl apply -k` of that overlay reverts it unless the overlay carries the same hostnames and replica count. Edit the overlay in the same change window.
+4. **Record the change for the manifests.** The Deployment is declared in the GitLab `manifests` repo (`definitions/sharedsparkcluster/overlays/prod`), which is behind the live cluster and is being rewritten. Until that rewrite lands, do not apply the overlay (it would revert the live Deployment); note the new hostnames and replica count for the rewrite.
 5. **During the event**, watch the master JSON for WAITING applications with pending requests and the `spark_cluster_usage` records; if they appear, add another node the same way.
 
 ### 4.1 Shrinking afterwards
@@ -114,7 +136,7 @@ Do it when the cluster is quiet (no active applications with cores on the master
 
 ### 4.2 Converting a per-user pool node permanently
 
-Same as growing, with the drain in step 2 done deliberately: remove the node from the Spark cluster manager's selector lists, wait for its dedicated clusters to disappear as users respawn (coordinate a Stop/Start for stragglers), then taint it and add it to the shared cluster. Node pairs move one at a time, with a week of WAITING-app observation before the next.
+Same as growing, with the drain in step 2 done deliberately: remove the node from the Spark cluster manager's selector lists, wait for its dedicated clusters to disappear as users respawn (coordinate a Stop/Start for stragglers), then taint it and add it to the shared cluster. Since 2026-10-11 no new dedicated cluster is created, so the drain is only the clusters started before that date. Node pairs move one at a time, with a week of observation of the queue signal before the next.
 
 ## 5. Adding a profile (extra small, extra large)
 
@@ -133,11 +155,11 @@ A profile is three numbers for the shared cluster: executor cores, executor memo
 | extra small | 1 core / 6 GiB | 2 | 2 cores / 12 GiB | 1 core / 2 GiB | teaching and light interactive use |
 | Medium | 3 cores / 18 GiB | 3 | 9 cores / 54 GiB | 1 core / 4 GiB | the default |
 | Large | 6 cores / 36 GiB | 10 | 60 cores / 360 GiB | 2 cores / 8 GiB | today's Large |
-| extra large | 6 cores / 36 GiB | 13 (20 with a third node) | 78 cores / 468 GiB (120 / 720) | 4 cores / 16 GiB | the same executor, more of them; approval-gated |
+| extra large | 6 cores / 36 GiB | 13 (20 with a third node) | 78 cores / 468 GiB (120 / 720) | 4 cores / 16 GiB | the same executor, more of them; would be gated by a KBase role (there is no approval process for dedicated clusters: decision 2026-10-11, nobody gets one) |
 
 The executor column repeats on purpose: the shapes are the pool's packing units, and a profile differs from the next one by how many of them it may hold, not by their size. The total column is what a user can take at full burst; with dynamic allocation it is a ceiling, and an idle user of any profile holds nothing.
 
 ## 6. Related
 
-- [cpu_ram_capacity_analysis.md](cpu_ram_capacity_analysis.md): node inventory and the per-user cluster capacity model; its shared-cluster section describes the pre-re-cut 40 × 8-core layout.
+- [cpu_ram_capacity_analysis.md](cpu_ram_capacity_analysis.md): node inventory, the shared-cluster capacity model (section 5) and the per-user cluster model kept for the rollback path.
 - Notebook image: [spark_notebook](https://github.com/KBaseDataLakehouse/spark_notebook) (Connect server, dynamic allocation, watchdog); hub: [BERDL_JupyterHub](https://github.com/KBaseDataLakehouse/BERDL_JupyterHub) (profiles, role gates); cluster manager: [spark_cluster_manager](https://github.com/KBaseDataLakehouse/spark_cluster_manager) (dedicated clusters, usage reporter); worker image: [kube_spark_manager_image](https://github.com/KBaseDataLakehouse/kube_spark_manager_image).
