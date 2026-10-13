@@ -26,21 +26,30 @@
 
 A user session has **two Spark parts on two node groups**, both set up by [BERDL_JupyterHub](https://github.com/KBaseDataLakehouse/BERDL_JupyterHub/blob/main/berdlhub/config/profiles.py#L36) at spawn (the profile definitions are in `berdlhub/config/profiles.py`): the notebook pod, which also hosts the Spark driver, and executors taken from the shared cluster on demand.
 
-```mermaid
-graph TD
-    subgraph NotebookNode ["kworker-03: notebook pods"]
-        Pod[Notebook pod, one per user]
-        Driver[Spark Connect server = driver]
-        Pod --- Driver
-    end
-    subgraph SharedCluster ["kworker-11 + kworker-18: shared Spark cluster"]
-        Master[Spark Master]
-        Workers[26 workers, 12 cores / 84 GiB each]
-        Pool[one executor pool for all users]
-        Master --> Workers
-        Workers --- Pool
-    end
-    Driver -->|executors on demand, up to the profile cap| Master
+```
+┌────────────────────────────────────────────────────────────────┐
+│  kworker-03: all notebook pods (168 cores, 1024 GB RAM)        │
+│                                                                │
+│  ┌───────────────────────────────────┐                         │
+│  │  Notebook pod, one per user       │                         │
+│  │  JupyterLab + kernels             │                         │
+│  │  Spark Connect server = driver    │                         │
+│  └───────────────────────────────────┘                         │
+│  Home directories on the node's local disk                     │
+└────────────────────────────────────────────────────────────────┘
+                 │ spark://sharedsparkclustermaster:7077
+                 │ executors requested when a job runs,
+                 │ up to the profile's cap (3 Medium, 10 Large);
+                 ▼ released 60 s after the last task
+┌────────────────────────────────────────────────────────────────┐
+│  kworker-11 + kworker-18: shared Spark cluster                 │
+│                                                                │
+│  ┌──────────────┐   ┌───────────────────────────────────────┐  │
+│  │ Spark Master │   │ 26 workers, 12 cores / 84 GiB each    │  │
+│  │ (kworker-11) │   │ one executor pool for all users;      │  │
+│  └──────────────┘   │ a worker fits 4 Medium or 2 Large     │  │
+│                     └───────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────┘
 ```
 
 - The **driver** is the Spark Connect server inside the notebook pod; kernels, the data API and remote clients (through the Spark Connect proxy) talk to it over gRPC. Its memory is part of the pod's limit. Home directories are on the node's local disk (`/mnt/state/prod/hub_homes/{username}`).
@@ -59,7 +68,7 @@ A user picks **Medium** or **Large** at spawn ([profile definitions](https://git
 | Driver (the Spark Connect server, inside the user's pod) | 1 core / 4 GiB heap | 2 cores / 8 GiB heap |
 | Executor (on the shared Spark cluster, kworker-11 + 18) | 3 cores / 18 GiB heap | 6 cores / 36 GiB heap |
 | Cap (most executors one user holds at once on the shared cluster) | 3 (9 cores / 54 GiB) | 10 (60 cores / 360 GiB) |
-| Share of the pool at full burst (Medium-sized units) | 3 of 104 | 20 of 104 |
+| Share of the shared cluster at full burst | 9 of 312 cores | 60 of 312 cores |
 
 > The 48 GB pod limit and the per-profile CPU limits date from 2026-10-05 (BERDL_JupyterHub #108); a pod started before then keeps 24 GB until its next restart. In-pod compute that outgrows the limit is OOM-killed by the cgroup; Spark executors do not count against it, they run on the shared workers. The cap is a ceiling, not a reservation: with dynamic allocation an idle user of either profile holds no executors.
 
@@ -155,7 +164,7 @@ The [datalake-mcp-server](https://github.com/KBaseDataLakehouse/datalake-mcp-ser
 
 So **160 users of the Large profile can all be connected**: each has its driver in its own pod and an application registered on the master holding nothing while idle. If all 160 ran a job at the same instant, the master would grant the 52 Large executors to the first requests, one per user, and the other users' jobs would wait their turn; with executors released a minute after each job's last task, the pool turns over at the pace of the jobs. In practice the measured simultaneous demand has been a dozen executors, so nobody has waited more than a few minutes in total over two days.
 
-Two limits of this model to keep in mind: the standalone master grants executors first come, first served, with no fairness between users, so under sustained contention the user who asked first keeps being served first; and a user with no executors waits with no timeout in a notebook (the data API's Spark queries time out after 15 minutes). The signal that the pool is too small is minutes in which a server wants more executors than it holds (the `spark_da_usage` records; the status page's shared-cluster table). Growing it is one Deployment edit per node, +52 Medium-sized units each (design doc, section 4); the five idle nodes and, once empty, the ten retiring pool nodes are the candidates. Before the change the same 160 users needed ten nodes of reserved per-user clusters (section 6).
+Two limits of this model to keep in mind: the standalone master grants executors first come, first served, with no fairness between users, so under sustained contention the user who asked first keeps being served first; and a user with no executors waits with no timeout in a notebook (the data API's Spark queries time out after 15 minutes). The signal that the pool is too small is minutes in which a server wants more executors than it holds (the `spark_da_usage` records; the status page's shared-cluster table). Growing it is one Deployment edit per node, +156 cores (13 workers) each (design doc, section 4); the five idle nodes and, once empty, the ten retiring pool nodes are the candidates. Before the change the same 160 users needed ten nodes of reserved per-user clusters (section 6).
 
 ---
 
