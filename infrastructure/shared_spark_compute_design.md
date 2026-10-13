@@ -2,7 +2,7 @@
 
 How BERDL schedules Spark for notebook users on the shared cluster: the cluster shape, why it is cut the way it is, what it means for a user, and how to grow or shrink it for a workshop or a demo.
 
-This document describes the cluster as deployed: the worker re-cut of 2026-10-03, a staff cohort from 2026-10-05, and every notebook user since 2026-10-11 15:33 UTC. It supersedes section 5 (Shared Spark Cluster) of [cpu_ram_capacity_analysis.md](cpu_ram_capacity_analysis.md); that document keeps the per-user cluster model only because it is the rollback path.
+This document describes the cluster as deployed: the worker re-cut of 2026-10-03, a staff cohort from 2026-10-05, and every notebook user since 2026-10-11 15:33 UTC. The capacity figures live in section 3 of [cpu_ram_capacity_analysis.md](cpu_ram_capacity_analysis.md); that document keeps the per-user cluster model (its section 6) only because it is the rollback path.
 
 Updated 2026-10-13.
 
@@ -147,7 +147,7 @@ A profile is three numbers for the shared cluster: executor cores, executor memo
 3. **Memory per task does not change with the shape.** Spark runs one task per executor core and the tasks share the executor heap, so every shape above gives a task about 6 GiB. A bigger executor buys more parallelism per executor, not a bigger task. Users who need a single task to have more memory than that run fewer tasks per executor (`spark.task.cpus`) or need a dedicated cluster with a different ratio; "extra large" on the shared pool should mean a higher cap, not a fatter executor.
 4. **Prefer raising the cap over inventing a shape.** An extra-large profile is the Large executor (6 cores / 36 GiB) with a cap of 15 or 20 instead of 10; an extra-small one is 1 core / 6 GiB or 2 cores / 12 GiB with a cap of 2 or 3. Fewer shapes keep the master's packing simple and the capacity arithmetic in one unit.
 5. **Bound the cap by the pool.** Cap × executor cores is the most one user can take; keep it under about a quarter of the pool (78 of 312 cores on two nodes, so a Large cap of 13, or 20 once a third node is added) so one user at full burst cannot starve everyone else. Dynamic allocation makes the cap a ceiling, not a reservation, so a generous cap costs nothing while the user is idle.
-6. **Size the driver with the cap.** The driver, the Spark Connect server in the notebook pod, holds the plan, the task bookkeeping and anything the user collects: 1 core / 4 GiB serves a cap of 3, 2 cores / 8 GiB a cap of 10, 4 cores / 16 GiB beyond that. The notebook pod's own limit (24 GiB today) bounds it.
+6. **Size the driver with the cap.** The driver, the Spark Connect server in the notebook pod, holds the plan, the task bookkeeping and anything the user collects: 1 core / 4 GiB serves a cap of 3, 2 cores / 8 GiB a cap of 10, 4 cores / 16 GiB beyond that. The notebook pod's own limit (48 GiB since 2026-10-05, with a CPU limit of 2 cores for Medium and 8 for Large) bounds it.
 7. **Check the slot budget before offering it.** Expected concurrent users of the profile × their cap, added to the existing demand, against the pool's slots (104 Medium-sized per two nodes, 52 per added node), using the measured concurrency rather than the user count. If it does not fit at the p95, add a node (section 4) before the profile goes live.
 
 | profile | executor | cap | total at full burst | driver | notes |
@@ -161,5 +161,5 @@ The executor column repeats on purpose: the shapes are the pool's packing units,
 
 ## 6. Related
 
-- [cpu_ram_capacity_analysis.md](cpu_ram_capacity_analysis.md): node inventory, the shared-cluster capacity model (section 5) and the per-user cluster model kept for the rollback path.
+- [cpu_ram_capacity_analysis.md](cpu_ram_capacity_analysis.md): node inventory, the shared-cluster capacity model (section 3) and the per-user cluster model kept for the rollback path (section 6).
 - Notebook image: [spark_notebook](https://github.com/KBaseDataLakehouse/spark_notebook) (Connect server, dynamic allocation, watchdog); hub: [BERDL_JupyterHub](https://github.com/KBaseDataLakehouse/BERDL_JupyterHub) (profiles, role gates); cluster manager: [spark_cluster_manager](https://github.com/KBaseDataLakehouse/spark_cluster_manager) (dedicated clusters, usage reporter); worker image: [kube_spark_manager_image](https://github.com/KBaseDataLakehouse/kube_spark_manager_image).
