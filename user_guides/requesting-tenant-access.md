@@ -100,7 +100,7 @@ Your access is active as soon as the request is approved, but a server that was 
 |-------|-----------------------------|
 | Trino (`get_trino_connection()`, the AI assistant) | Within about 5 minutes; nothing to do |
 | Spark | After you restart Spark Connect (below) |
-| File browser (`lakehouse_minio`) | Within about an hour on its own; a server restart shows it right away |
+| File browser (`lakehouse_minio`) | Within about a minute of opening the folder; if not, restart your server |
 
 To use the tenant from Spark in a notebook that is already running:
 

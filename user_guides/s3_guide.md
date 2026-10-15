@@ -68,6 +68,39 @@ s3.download_file("my-bucket", "path/to/file.parquet", "file.parquet")
 `pandas` (via `s3fs`) works the same way — it picks up the same credentials, so
 `pd.read_parquet("s3://my-bucket/path/to/file.parquet")` just works.
 
+## The `lakehouse_minio` folder in the file browser
+
+The JupyterLab file browser shows your object storage as a folder named
+`lakehouse_minio` (also under **FAVORITES → Lakehouse Objectstore**). You can
+browse, open, upload and download files there with the mouse.
+
+It is a view of S3, not a folder on disk, so it exists **only in the file
+browser**. A terminal (`ls ~`), Python's `open()` or `os.listdir()`, and shell
+scripts won't find it. From a terminal or from code, use the S3 path behind each
+folder with the AWS CLI, `boto3` or `pandas`:
+
+| File browser folder | S3 path | What it holds |
+|---|---|---|
+| `lakehouse_minio/my-files` | `s3://cdm-lake/users-general-warehouse/<user>/` | Your files (read/write) |
+| `lakehouse_minio/my-sql` | `s3://cdm-lake/users-sql-warehouse/<user>/` | Your tables, managed by the catalog (see below) |
+| `lakehouse_minio/<tenant>-files` | `s3://cdm-lake/tenant-general-warehouse/<tenant>/` | A tenant's files (read/write) |
+| `lakehouse_minio/<tenant>-sql` | `s3://cdm-lake/tenant-sql-warehouse/<tenant>/` | A tenant's tables |
+| `lakehouse_minio/<tenant>-files-ro`, `<tenant>-sql-ro` | The same two tenant paths | Tenants you have read-only access to |
+
+For example, to list in a terminal what the file browser shows as
+`lakehouse_minio/my-files`:
+
+```bash
+aws s3 ls s3://cdm-lake/users-general-warehouse/<user>/
+```
+
+A few notes:
+
+- **Large files:** upload multi-GB files with `aws s3 cp` rather than the file
+  browser, which holds the whole file in memory while it uploads.
+- **New tenants:** after you're added to a tenant, its folders appear here within
+  about a minute; see [Requesting Tenant Access](requesting-tenant-access.md).
+
 ## What you can access (and why you get `AccessDenied`)
 
 Your credentials authenticate you, but a MinIO IAM policy decides which paths you
