@@ -181,9 +181,9 @@ for namespace, tables in db_structure.items():
 ## Installing your own Python packages
 
 In a terminal, `pip install` only works inside an activated **virtual environment**.
-Outside one it stops with `ERROR: Could not find an activated virtualenv (required)`, so
-nothing you install can change the image's own Python. Create a venv once and install
-into it:
+Outside one it stops with `ERROR: Could not find an activated virtualenv (required)`. The
+image's own Python environment is read-only as well, so `pip`, `uv` and `conda install`
+cannot change it. Create a venv once and install into it:
 
 ```bash
 python -m venv --system-site-packages ~/envs/myproj && source ~/envs/myproj/bin/activate
