@@ -86,9 +86,13 @@ never shadow a newer image — but developers and testers can opt out:
 
 1. Install your build into your home with KIND's own tooling
    ([`kbaseincubator/kind` INSTALL.md](https://github.com/kbaseincubator/kind/blob/main/docs/INSTALL.md)):
-   `gh repo clone kbaseincubator/kind ~/king && bash ~/king/scripts/install.sh`,
-   then `kind update [@<cut>]` / `kind install <app>[@<tag>]` as you like. This
-   puts `kind`, the capability CLIs and the app CLIs in `~/.local/bin`.
+   `gh repo clone kbaseincubator/kind ~/king && PYTHONNOUSERSITE= PIP_REQUIRE_VIRTUALENV=0 bash ~/king/scripts/install.sh`,
+   then `kind update [@<cut>]` / `kind install <app>[@<tag>]` (with the same two
+   variables in front) as you like. The installer uses `pip install --user`, which
+   terminals otherwise refuse (see
+   [Installing your own Python packages](user_guide.md#installing-your-own-python-packages));
+   the variables allow it for that one command. This puts `kind`, the capability CLIs
+   and the app CLIs in `~/.local/bin`.
 2. Opt in: `touch ~/.kind/prefer-user-install` (or, for one launch only, set
    `BERDL_KIND_PREFER_USER_INSTALL=true` in the environment of whatever starts
    KIND — the Jupyter server does not read `~/.env`).

@@ -49,19 +49,16 @@ python -c "from berdl_notebook_utils import get_spark_session; print('BERDL util
 
 ### Step 5: Install Additional Packages
 
-> **❌ Make sure your venv is activated first — never `pip install --user`.**
-> Only run `pip install` **after** `source ~/my_venv/bin/activate` (Step 3); your
-> prompt should show `(my_venv)`. If you run `pip install` outside an activated
-> environment, pip can't write to the read-only base environment and **silently
-> falls back to a `--user` install** into `~/.local`, which **shadows the base
-> image for your whole server** — this can break your JupyterLab file browser,
-> the data object-store drive, and Spark, and it survives restarts. Watch for this
-> line in pip's output — if you see it, **stop**:
+> **❌ Activate your venv first.** Run `pip install` only **after**
+> `source ~/my_venv/bin/activate` (Step 3); your prompt should show `(my_venv)`.
+> Outside an activated venv, pip stops with:
 > ```
-> Defaulting to user installation because normal site-packages is not writeable
+> ERROR: Could not find an activated virtualenv (required).
 > ```
-> Fix: `pip uninstall --user <package>`, then reinstall inside your activated venv
-> (see [Troubleshooting](#a-pip-user-install-broke-my-environment)).
+> That is deliberate: it keeps your packages out of the image's own Python. Don't work
+> around it with `pip install --user` or `PYTHONPATH=~/.local/...` — a package in
+> `~/.local` shadows the image's copy in your notebooks (see
+> [Troubleshooting](#a-package-in-local-is-breaking-my-notebooks)).
 
 Install only the additional packages you need, including `ipykernel`. In this example, we'll install `plotly` for visualization:
 
@@ -155,6 +152,21 @@ Each kernel runs with:
 - **Its own additional specialized packages**
 - **Access to BERDL helper functions** (`get_spark_session()`, `display_df()`, etc.)
 
+## Command-Line Tools
+
+To install a Python **command-line tool** (for example a KIND app you run yourself), use
+`pipx` instead of a venv you manage by hand. It puts each tool in its own environment and
+its command in `~/.local/bin`:
+
+```bash
+pipx install --system-site-packages <package or git+https://… URL>
+pipx ensurepath   # once, then open a new terminal so the command is on your PATH
+```
+
+`--system-site-packages` lets the tool use the image's packages (PySpark,
+`berdl_notebook_utils`). Update a tool with `pipx install --force …` (same arguments) and
+remove it with `pipx uninstall <name>`.
+
 ## Useful Commands
 
 ### List All Available Kernels
@@ -238,33 +250,31 @@ source ~/my_venv/bin/activate
 
 If the environment doesn't exist, create it first with `python -m venv ~/my_venv`
 
-### A pip user-install broke my environment
+### A package in ~/.local is breaking my notebooks
 
-Symptoms: your **file browser folder tree won't render**, favorites don't work,
-the object-store (S3) folders 404, or Spark suddenly fails — often after a
-`pip install` you ran without activating a venv, and **it stays broken across
-server restarts**. Cause: a package landed in `~/.local` (a `--user` install) and
-now **shadows the base image** for your entire server (the system Jupyter server
-uses the base Python, and `~/.local` is always on its path).
+Symptoms: an import in a notebook fails or behaves differently than in a terminal (for
+example a version conflict), or a command in `~/.local/bin` fails in a terminal with
+`ModuleNotFoundError`. Cause: a package landed in `~/.local`, from `%pip install` in a
+notebook or an older `pip install --user`. Notebook kernels load `~/.local` ahead of the
+image's packages; the notebook server, terminals and KIND ignore it.
 
-1. Find what's in your user-site directory:
+1. See what's there:
    ```bash
    ls ~/.local/lib/python*/site-packages/
    ```
-2. Uninstall the offending user-site package(s) so the base-image version is used
-   again (e.g. if you installed `google-cloud-storage`):
-   ```bash
-   pip uninstall -y google-cloud-storage
+2. Remove the package from a notebook cell, then restart the kernel
+   (**Kernel** → **Restart Kernel**):
+   ```python
+   %pip uninstall -y <package>
    ```
-   To confirm the shadow is gone (this reproduces the failure a fresh server hits,
-   so it should now succeed):
+3. For a command-line tool, also delete its leftover script and reinstall it with pipx
+   (see [Command-Line Tools](#command-line-tools)):
    ```bash
-   PYTHONPATH="$(echo ~/.local/lib/python*/site-packages)" python -c "import gcsfs; print('OK')"
+   rm -f ~/.local/bin/<tool>
+   pipx install --system-site-packages <package>
    ```
-3. **Stop and Start your server** (Hub → *File → Hub Control Panel → Stop My
-   Server*, then start again) so it reloads cleanly.
-4. Going forward, install packages **only inside an activated venv** (Steps 2–5) —
-   never `pip install --user`.
+4. Going forward, install packages into an activated venv (Steps 2–5), or with pipx
+   for command-line tools.
 
 If you're unsure which package is the culprit, contact the BERDL Platform team.
 
