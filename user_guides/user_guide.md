@@ -196,6 +196,14 @@ python -m ipykernel install --user --name myproj --display-name "Python (myproj)
 environment. The [custom packages guide](custom_packages_guide.md) walks through this step
 by step.
 
+For **tools from conda** (for example bioconda programs such as BLAST or HMMER), create a
+conda environment in your home; it persists across server restarts:
+
+```bash
+conda create -p ~/envs/bio -c conda-forge -c bioconda <tool>
+eval "$(conda shell.bash hook)" && conda activate ~/envs/bio   # or run one command: conda run -p ~/envs/bio <tool>
+```
+
 For a **command-line tool** (for example a KIND app you install yourself), use `pipx`,
 which gives each tool its own environment:
 
