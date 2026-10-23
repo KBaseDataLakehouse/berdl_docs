@@ -1,6 +1,6 @@
 # Tenant SQL Warehouse User's Guide
 
-This guide explains how to configure your Spark session to write tables to either your personal SQL warehouse or a tenant's shared SQL warehouse.
+This guide explains how to write tables to your personal Iceberg catalog or to a tenant's shared catalog.
 
 ## Overview
 
@@ -75,25 +75,25 @@ spark.sql(f"SELECT * FROM {ns}.shared_dataset").show()
 
 ### Requirements
 
-- You must be a member of the specified tenant/group
-- The system validates your membership before allowing access
+- Creating namespaces and writing tables needs read-write membership (the `<tenant>` group)
+- Read-only members (`<tenant>ro`) can list and query the tables but not change them
+- Membership is checked on every request
 
 ## Spark Connect Architecture
 
 BERDL uses **Spark Connect**, which provides a client-server architecture:
-- **Connection Protocol**: Uses gRPC for efficient communication with remote Spark clusters
-- **Spark Connect Server**: Runs locally in your notebook pod as a proxy
-- **Spark Connect URL**: `sc://localhost:15002`
-- **Driver and Executors**: Runs locally in your notebook pod
+- **Your notebook** talks to a Spark Connect server over gRPC at `sc://localhost:15002`.
+- **The Spark Connect server** runs in your notebook pod and is your Spark driver; `get_spark_session()` connects to it.
+- **Executors** run on the BERDL Spark compute pool, not in your pod. They are taken when you run something and released after about a minute idle (see [Creating a Spark Session](user_guide.md#51-creating-a-spark-session)).
 
 ### Automatic Credential Management
 
 Your credentials are automatically configured when your notebook server starts:
 
-1. **JupyterHub** calls the governance API to create/retrieve your S3 and Polaris credentials
-2. **Environment Variables** are set in your notebook (S3 keys + Polaris OAuth2 tokens)
-3. **Spark Session** is pre-configured with access to your personal catalog and tenant catalogs
-4. **Notebooks** use credentials from environment (no API call needed)
+1. **Your notebook server**, when it starts, fetches your S3 and Polaris credentials from the governance API (creating them the first time)
+2. **Environment variables** hold them (S3 keys and a Polaris OAuth client ID and secret); each new kernel re-reads the current set when it starts
+3. **Spark Connect** is configured with your personal catalog and the tenant catalogs you belong to
+4. **You** never put a credential in your code
 
 This ensures secure, per-user access without exposing credentials in code.
 
@@ -207,7 +207,7 @@ Your username also works in Spark, so it is the portable form. Use it whenever y
 
 - **Always use the returned namespace**: `create_namespace_if_not_exists()` returns the fully qualified namespace (e.g., `my.analysis`). Always use this value when creating or querying tables.
 - **Tenant membership required**: Attempting to access a tenant warehouse without membership will fail.
-- **Credentials are automatic**: S3 and Polaris credentials are set by JupyterHub — you don't need to call any API to get them.
+- **Credentials are automatic**: your S3 and Polaris credentials are fetched when your server and each kernel start — you don't need to call any API to get them.
 - **Spark Connect is default**: All sessions use Spark Connect for better stability and resource isolation.
 - **Iceberg features**: Your tables support time travel, schema evolution, and snapshot management. See [Working with Iceberg Tables](#working-with-iceberg-tables).
 - **Old `u_<user>__<db>` or `<tenant>_<db>` names**: Delta Lake is retired; see [Delta Lake Retirement](iceberg_migration_guide.md) for the new names.

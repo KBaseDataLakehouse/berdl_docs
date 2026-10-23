@@ -19,11 +19,11 @@ https://hub.berdl.kbase.us/
 
 > **💡 Accessing Other Environments:**
 >
-> Development and staging environments require SSH tunnel setup:
-> - Development: `https://hub.dev.berdl.kbase.us/`
-> - Staging: `https://hub.stage.berdl.kbase.us/`
+> Development (`https://hub.dev.berdl.kbase.us/`) and staging (`https://hub.stage.berdl.kbase.us/`) are reachable only through the KBase SSH tunnel:
+> 1. Open the tunnel (a SOCKS5 proxy on port 1338) as in [Accessing storage from your laptop](s3_guide.md#accessing-storage-from-your-laptop), step 2.
+> 2. Point your browser at it. In Firefox, use **Settings → Network Settings → Manual proxy configuration**: SOCKS host `127.0.0.1`, port `1338`, **SOCKS v5**, and tick **Proxy DNS when using SOCKS v5**. Or use a proxy-switcher extension (for example Proxy SwitchyOmega) with a rule that sends only `*.berdl.kbase.us` through the proxy.
 >
-> For SSH tunnel setup instructions, see the [Object Storage (S3) Guide - Accessing storage from your laptop](s3_guide.md#accessing-storage-from-your-laptop) section.
+> Switch back to a direct connection when you're done.
 
 This will open the JupyterHub login interface.
 
@@ -31,7 +31,7 @@ This will open the JupyterHub login interface.
 
 ### 2. Log In with Your KBase Credentials
 
-Log in using your KBase credentials (the same 3rd party identity provider, username and password you use for KBase services).
+Log in to KBase **with ORCID** and complete ORCID's two-factor prompt. BERDL checks that two-factor authentication was used for this login, so signing in with Google or Globus is refused (you see a "two-factor authentication required" page) even if your account has ORCID linked.
 
 > **⚠️ Important Authentication Requirements:**
 > - If you don't have a KBase account yet, you'll need to register at https://narrative.kbase.us/ before proceeding.
@@ -40,8 +40,8 @@ Log in using your KBase credentials (the same 3rd party identity provider, usern
 >
 >      <img src="screen_shots/link_ORCID.png" alt="link_ORCID" style="max-width: 600px;">
 >
-> - **Multi-Factor Authentication (MFA) must be enabled on your ORCID account for security**
->   - To enable MFA: Go to https://orcid.org/account → Click on your username → Account settings → Two-factor authentication
+> - **Two-factor authentication (2FA) must be enabled on your ORCID account and used when you log in**
+>   - To enable 2FA: Go to https://orcid.org/account → Click on your username → Account settings → Two-factor authentication (see [ORCID's 2FA instructions](https://support.orcid.org/hc/en-us/articles/360006971673-Secure-your-account-with-two-factor-authentication))
 >
 >      <img src="screen_shots/ORCID_MFA.png" alt="ORCID_MFA" style="max-width: 600px;">
 >
@@ -53,8 +53,9 @@ Log in using your KBase credentials (the same 3rd party identity provider, usern
 ### 3. Data Access
 By default, you have **read/write access** to:
 - Your personal Iceberg catalog (`my`) — create namespaces and tables here
-- Any tenant Iceberg catalogs you belong to (e.g., `kbase`) — shared team data
 - Your personal file storage (`s3a://cdm-lake/users-general-warehouse/{username}/`) — free-form files such as CSVs, TSVs, raw exports, and staged inputs
+
+You can also use the tenant catalogs you belong to (e.g., `kbase`) for shared team data. Tenant membership is read-only or read-write; see [Permission Levels Explained](requesting-tenant-access.md#permission-levels-explained).
 
 Your tables live under `s3a://cdm-lake/users-sql-warehouse/{username}/`. That prefix is managed by the catalog: you can list it, but you cannot write files into it directly. Write tables through Spark (see the [Tenant SQL Warehouse Guide](tenant_sql_warehouse_guide.md)) and put everything else in your file storage. The [Object Storage (S3) Guide](s3_guide.md#what-you-can-access-and-why-you-get-accessdenied) explains which prefixes you can write to.
 
@@ -71,7 +72,7 @@ To access shared resources and example notebooks, click on the `Global Share` fo
 
 ### 5. Using Pre-loaded Functions
 
-BERDL JupyterHub automatically loads helper functions and utilities when you start a notebook. These are imported from [berdl_notebook_utils](../notebook_utils/berdl_notebook_utils) and are immediately available without any imports needed!
+BERDL JupyterHub automatically loads helper functions and utilities when you start a notebook. These are imported from [berdl_notebook_utils](https://github.com/KBaseDataLakehouse/spark_notebook/tree/main/notebook_utils/berdl_notebook_utils) and are immediately available without any imports needed!
 
 #### 5.1 Creating a Spark Session
 
@@ -86,7 +87,7 @@ This automatically configures:
 - Apache Iceberg catalogs (personal `my` + tenant catalogs via Polaris) — `spark.sql("SHOW CATALOGS")` or `list_catalogs()` lists them
 - S3 object storage access
 
-**Where your Spark runs.** Your session runs on a shared compute pool. Executors are taken from the pool when you run something and released after about a minute of idleness, so the first query after a pause takes a few seconds longer while an executor starts; nothing is reserved while you are idle. Your profile sets the executor size and the most executors you can hold at once (Medium: up to 3 executors of 3 cores / 18 GiB; Large: up to 10 of 6 cores / 36 GiB). Classic (non-Connect) Spark sessions and the create-my-cluster helpers are not available on the pool; `get_spark_session()` is the way in. If a query seems to wait for executors for more than a few seconds, note the time and let the BERDL team know.
+**Where your Spark runs.** Your session runs on a shared compute pool. Executors are taken from the pool when you run something and released after about a minute of idleness (an executor holding cached or shuffle data stays up to 15 minutes), so the first query after a pause takes a few seconds longer while an executor starts; nothing is reserved while you are idle. Your profile sets the executor size and the most executors you can hold at once (Medium: up to 3 executors of 3 cores / 18 GiB; Large: up to 10 of 6 cores / 36 GiB). Classic (non-Connect) Spark sessions and the create-my-cluster helpers are not available on the pool; `get_spark_session()` is the way in. If a query seems to wait for executors for more than a few seconds, note the time and let the BERDL team know.
 
 Unqualified names resolve in your personal catalog, so `spark.sql("SELECT * FROM analysis.my_table")` reads `my.analysis.my_table`; tenant tables are written as `<tenant>.<namespace>.<table>`. The [Tenant SQL Warehouse Guide](tenant_sql_warehouse_guide.md) covers creating tables and Iceberg features such as time travel and schema evolution.
 
@@ -94,7 +95,7 @@ Unqualified names resolve in your personal catalog, so `spark.sql("SELECT * FROM
 
 #### 5.2 Picking Up New Catalog Access
 
-When your catalog access changes while a notebook is already running (a tenant request was approved, or access to an Iceberg namespace was granted or revoked), restart Spark Connect. It picks up your current catalog list as it starts:
+When your catalog access changes while a notebook is already running (for example, a tenant request was approved), restart Spark Connect. It picks up your current catalog list as it starts:
 
 ```python
 start_spark_connect_server(force_restart=True)
@@ -126,9 +127,9 @@ display_df(df)
 
 <img src="screen_shots/display_func.png" alt="display_df" style="max-width: 800px;">
 
-> **⚠️ Warning:** `display_df()` converts Spark DataFrames to pandas DataFrames and loads the entire DataFrame into memory. Only use this for reasonably-sized datasets that can fit in memory. For large datasets, use `show()` or `limit()` the results first:
+> **⚠️ Note:** For a Spark DataFrame, `display_df()` shows at most the first 1,000 rows (it converts them to pandas), but it first counts every row, which runs a full Spark job on a large table. Use `limit()` first to keep it fast. A pandas DataFrame is shown in full, so keep it to a size that fits in memory.
 > ```python
-> # Safe for large datasets - limit rows first
+> # Fast on large tables - limit rows first
 > display_df(df.limit(100))
 > ```
 
@@ -138,11 +139,11 @@ BERDL provides prebuilt functions to explore and query your data. All functions 
 
 #### 6.1 Listing Databases (Namespaces)
 
-Use `get_databases()` to list all namespaces you have access to. Each is returned in `catalog.namespace` form (e.g. `my.analysis`, `kbase.genomes`) and can be used directly in a query:
+Use `get_databases()` to list all namespaces you have access to. Each is returned in `catalog.namespace` form (e.g. `my.analysis`, `kbase.genomes`) and can be used directly in a query. Your personal namespaces appear twice, as `my.<namespace>` and `<username>.<namespace>`: they are the same namespace, and Trino accepts only the username form.
 
 ```python
-# Get list of all databases/namespaces
-databases = get_databases()
+# Get list of all databases/namespaces as a Python list (the default is a JSON string)
+databases = get_databases(return_json=False)
 print(f"Available databases: {databases}")
 ```
 
@@ -152,7 +153,7 @@ Use `get_tables()` to list all tables in a specific namespace:
 
 ```python
 # List all tables in a namespace
-tables = get_tables("my.my_namespace")
+tables = get_tables("my.my_namespace", return_json=False)
 print(f"Tables in my.my_namespace: {tables}")
 ```
 
@@ -192,9 +193,10 @@ python -m ipykernel install --user --name myproj --display-name "Python (myproj)
 ```
 
 `--system-site-packages` keeps the image's packages (PySpark, pandas,
-`berdl_notebook_utils`) available inside the venv; leave it out for a fully isolated
-environment. The [custom packages guide](custom_packages_guide.md) walks through this step
-by step.
+`berdl_notebook_utils`) available inside the venv; leave it out for an environment without
+the image's packages (only PySpark stays importable; pandas, `berdl_notebook_utils` and the
+pre-loaded helpers do not). The [custom packages guide](custom_packages_guide.md) walks
+through this step by step.
 
 For **tools from conda** (for example bioconda programs such as BLAST or HMMER), create a
 conda environment in your home; it persists across server restarts:
@@ -204,21 +206,34 @@ conda create -p ~/envs/bio -c conda-forge -c bioconda <tool>
 eval "$(conda shell.bash hook)" && conda activate ~/envs/bio   # or run one command: conda run -p ~/envs/bio <tool>
 ```
 
-For a **command-line tool** (for example a KIND app you install yourself), use `pipx`,
-which gives each tool its own environment:
+Inside an activated conda environment, `pip` stops with the same virtualenv message,
+because a conda environment is not a virtualenv. Install with `conda install`, or, for a
+package only on PyPI, run `PIP_REQUIRE_VIRTUALENV=0 pip install <package>` while that
+environment is active (it installs into that environment).
+
+For a **command-line tool**, use `pipx`, which gives each tool its own environment:
 
 ```bash
 pipx install --system-site-packages <package or git+https://… URL>
-pipx ensurepath   # once, then open a new terminal so the tool is on your PATH
+echo 'export PATH="$PATH:$HOME/.local/bin"' >> ~/.custom_profile   # once; then open a new terminal
 ```
+
+pipx puts the tool's command in `~/.local/bin`, which is not on your `PATH` until you add
+it. Add it in `~/.custom_profile`, not with `pipx ensurepath`: that edits `~/.bashrc` and
+`~/.bash_profile`, which BERDL replaces every time your server starts. For KIND, KOROS or
+an app build you want to test in KIND, follow the
+[KIND guide](kind_guide.md#running-your-own-build-of-kind-koros-or-an-app) instead.
 
 In a notebook, the same rule applies: `%pip install <package>` works in one of your venv
 kernels (it installs into that venv) and stops with the same message in the default
-**Python 3** kernel. Create a venv kernel as shown above and switch the notebook to it.
-Nothing new goes into `~/.local`, where a package would shadow the image's copy — and, for a
+**Python 3 (ipykernel)** kernel. Create a venv kernel as shown above and switch the notebook
+to it. In a notebook use `%pip`, not `!pip`: `!pip` runs the image's pip even in a venv
+kernel.
+
+No new package goes into `~/.local`, where it would shadow the image's copy — and, for a
 package that ships a JupyterLab extension, override the image's extension in your browser.
-The notebook server, terminals and KIND ignore `~/.local` on purpose
-(`PYTHONNOUSERSITE=1`), which is how a stray `pip install --user` once stopped servers from
+The notebook server, terminals and KIND ignore `~/.local` packages on purpose
+(`PYTHONNOUSERSITE=1`): a stray `pip install --user` package there once stopped servers from
 starting. Don't work around it with `PYTHONPATH=~/.local/...`.
 
 ## Troubleshooting
@@ -255,7 +270,7 @@ Common symptoms it fixes:
 
 - `spark.sql("SHOW CATALOGS")` returns only `spark_catalog` — your Iceberg catalogs are missing
 - Queries fail with `SCHEMA_NOT_FOUND` for schemas you know exist
-- `get_spark_session()` fails with `RETRIES_EXCEEDED` or hangs
+- `get_spark_session()` fails with `Spark Connect server is not listening on … and could not be started`, `Spark Connect session did not respond within 90s`, or `RETRIES_EXCEEDED`
 - Your Spark session is unresponsive
 
 **The fix:** in any notebook cell, run
@@ -291,6 +306,7 @@ This does everything the restart does and also refreshes your Trino catalog. It 
 {
   'credentials':      {'status': 'ok', 'username': '<your-username>', 'rotated': False},
   'polaris_catalog':  {'status': 'ok', 'personal_catalog': 'user_<your-username>', 'tenant_catalogs': [...]},
+  'spark_session_stopped': True,
   'spark_connect':    {'pid': '...', ...},
   'trino_catalogs':   {'status': 'ok'},
 }
@@ -335,6 +351,7 @@ You should see output similar to:
 {
   'credentials':      {'status': 'ok', 'username': '<your-username>', 'rotated': True},
   'polaris_catalog':  {'status': 'ok', 'personal_catalog': 'user_<your-username>', 'tenant_catalogs': [...]},
+  'spark_session_stopped': True,
   'spark_connect':    {'pid': '...', ...},
   'trino_catalogs':   {'status': 'ok'},
 }

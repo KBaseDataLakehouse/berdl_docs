@@ -1,10 +1,10 @@
 # Delta Lake Retirement
 
-Delta Lake and the Hive Metastore were retired on 2026-09-30. Every BERDL table is now an Apache Iceberg table in an Apache Polaris catalog: your personal catalog (`my` in Spark, or your username) and one catalog per tenant (e.g. `kbase`).
+Delta Lake tables became read-only on 2026-09-30, and Delta Lake and the Hive Metastore were removed from BERDL notebooks in October 2026 (production switched on 2026-10-13). Every BERDL table is now an Apache Iceberg table in an Apache Polaris catalog: your personal catalog (`my` in Spark, or your username) and one catalog per tenant (e.g. `kbase`).
 
 ## What happened to my tables
 
-Your Delta tables were migrated to Iceberg before the retirement. The data is the same; only the name changed. Find a table's new name here:
+Your Delta tables were migrated to Iceberg before the retirement. The data is the same; only the name changed. Two kinds of table were not copied: tables you had already dropped from your Iceberg catalog (they were not re-created), and Delta tables with no columns. Find a table's new name here:
 
 | Old Delta/Hive name | New Iceberg name |
 |---------------------|------------------|

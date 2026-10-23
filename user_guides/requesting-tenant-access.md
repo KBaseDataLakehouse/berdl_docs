@@ -7,8 +7,8 @@ This guide explains how to request access to tenant groups in BERDL JupyterHub.
 ## Overview
 
 **Tenants** are shared data spaces where team members can collaborate. Each tenant has:
-- **Read-only access** (`read_only`) - View and download data
-- **Read-write access** (`read_write`) - Full access to create, modify, and delete data
+- **Read-only access** (`read_only`) - Query tables, view and download files
+- **Read-write access** (`read_write`) - Full access to create, modify, and delete tables and files
 
 Access requests go through an admin approval workflow via Slack.
 
@@ -17,6 +17,8 @@ Access requests go through an admin approval workflow via Slack.
 ## Method 1: Toolbar Button (Recommended)
 
 The easiest way to request access is using the **Request Tenant Access** button in the notebook toolbar.
+
+> **Also on the Tenants page:** JupyterLab opens a **Tenants** page when it starts with no other tabs open (reopen it from the Launcher: **BERDL → Browse Tenants**). Each tenant you don't have access to has a **Request Tenant Access** button that opens the same dialog with that tenant selected.
 
 ### Step 1: Open a Notebook
 
@@ -30,10 +32,10 @@ Click **Request Tenant Access** to open the access request dialog.
 
 ### Step 3: Fill Out the Form
 
-1. **Select a Tenant** - Choose from the available tenants
-2. **View Your Tenants** - See which tenants you already belong to
-3. **Select Permission Level** - Choose Read-Only or Read-Write
-4. **Add Justification** (optional) - Explain why you need access
+1. **Available Tenants** - Pick the tenant you want
+2. **My Tenants** - Shows the tenants you already belong to (`<tenant>ro` means read-only)
+3. **Permission Level** - Choose Read-Only or Read-Write
+4. **Justification (optional)** - Explain why you need access
 
 ![Tenant Access Request dialog](screen_shots/tenant_request.png)
 
@@ -43,7 +45,7 @@ Click **Submit Request**. Your request will be sent to a KBase admin for approva
 
 ### Step 5: Wait for Approval
 
-Admins will review and approve/deny your request. Approvals typically happen within a few hours during business hours. Once approved, see [After Your Request Is Approved](#after-your-request-is-approved).
+Admins will review and approve/deny your request, usually the same business day. Once approved, see [After Your Request Is Approved](#after-your-request-is-approved).
 
 ---
 
@@ -76,7 +78,7 @@ print(result['message'])
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `tenant_name` | Yes | Name of the tenant you want to access |
-| `permission` | Yes | `"read_only"` or `"read_write"` |
+| `permission` | No | `"read_only"` (default) or `"read_write"` |
 | `justification` | No | Reason for your request (helps admins approve faster) |
 
 ### Step 2: Verify Your Access
@@ -120,8 +122,8 @@ The simplest alternative is to restart your server: **File → Hub Control Panel
 
 | Permission | Group Suffix | What You Can Do |
 |------------|--------------|-----------------| 
-| `read_only` | `ro` | View files, download data, list contents |
-| `read_write` | (none) | All read_only permissions + upload, modify, delete |
+| `read_only` | `ro` | Query the tenant's tables; browse and download its files |
+| `read_write` | (none) | Everything read-only allows, plus create namespaces and tables, write and delete data, upload files |
 
 ---
 
@@ -158,10 +160,10 @@ A: Use the **toolbar button** (Method 1) - it's faster and easier. Use Python co
 A: The toolbar dialog shows all available groups. Or use `list_available_groups()` in Python.
 
 **Q: How long does approval take?**
-A: Approvals are processed when an admin reviews the Slack notification. Typically same-day during business hours.
+A: Approvals are processed when an admin reviews the Slack notification, usually the same business day.
 
 **Q: I was approved, but I can't see the tenant. What now?**
-A: A running server needs a Spark Connect restart before Spark sees a new tenant, and the file browser can take up to an hour. See [After Your Request Is Approved](#after-your-request-is-approved).
+A: Spark needs a Spark Connect restart before it sees a new tenant; the file browser shows its folders within about a minute, and Trino within about 5 minutes. See [After Your Request Is Approved](#after-your-request-is-approved).
 
 **Q: Can I request access to multiple tenants?**
 A: Yes, submit a separate request for each tenant.
