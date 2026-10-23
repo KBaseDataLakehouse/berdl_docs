@@ -72,7 +72,7 @@ To access shared resources and example notebooks, click on the `Global Share` fo
 
 ### 5. Using Pre-loaded Functions
 
-BERDL JupyterHub automatically loads helper functions and utilities when you start a notebook. These are imported from [berdl_notebook_utils](https://github.com/KBaseDataLakehouse/spark_notebook/tree/main/notebook_utils/berdl_notebook_utils) and are immediately available without any imports needed!
+BERDL JupyterHub automatically loads helper functions and utilities when you start a notebook. These are imported from the `berdl_notebook_utils` package and are immediately available without any imports needed!
 
 #### 5.1 Creating a Spark Session
 
