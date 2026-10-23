@@ -21,10 +21,11 @@ Step-by-step guides for working with the BERDL platform. Guides live under [`use
 | [Requesting Tenant Access](./user_guides/requesting-tenant-access.md) | How to request access to tenant groups via the JupyterLab extension. |
 | [Tenant SQL Warehouse](./user_guides/tenant_sql_warehouse_guide.md) | Writing tables to your personal Iceberg catalog or a tenant's shared catalog. |
 | [Trino SQL Queries](./user_guides/trino_guide.md) | Interactive read-only SQL over your data lake tables with Trino. |
+| [Claude Code with the Data Lake](./user_guides/claude_code_guide.md) | Exploring and querying your tables in natural language with Claude Code and the BERDL MCP server. |
 | [Data Sharing](./user_guides/data_sharing_guide.md) | Sharing your datasets with other users and groups. |
 | [Object Storage (S3)](./user_guides/s3_guide.md) | Accessing S3 object storage from notebooks with the AWS CLI and `boto3`, and which prefixes hold your files vs. your tables. |
 | [MinIO Client & UI](./user_guides/minio_guide.md) | Using the `mc` client (in notebooks and from your laptop) and the MinIO web UI (staging, production). |
-| [Installing Custom Python Packages](./user_guides/custom_packages_guide.md) | Creating a persistent custom virtual environment for extra packages, installing command-line tools with pipx, and using Claude Code with the BERDL MCP server. |
+| [Installing Custom Python Packages](./user_guides/custom_packages_guide.md) | Creating a persistent custom virtual environment for extra packages, and installing command-line tools with pipx. |
 | [Delta Lake Retirement](./user_guides/iceberg_migration_guide.md) | Delta Lake and the Hive Metastore are retired: how old table names map to the Iceberg catalogs and what code changed. |
 | [Admin: User & Tenant Management](./user_guides/admin_user_management_guide.md) | Administrative operations for managing users, tenants, and access (requires admin role). |
 

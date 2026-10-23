@@ -179,6 +179,8 @@ for namespace, tables in db_structure.items():
         print(f"{namespace}.{table}: {columns}")
 ```
 
+To explore and query your tables in natural language from a terminal, see [Claude Code with the BERDL Data Lake](claude_code_guide.md).
+
 ## Installing your own Python packages
 
 In a terminal, `pip install` only works inside an activated **virtual environment**.
