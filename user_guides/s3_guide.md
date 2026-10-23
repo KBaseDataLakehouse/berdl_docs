@@ -154,8 +154,7 @@ A few things that commonly trip people up:
   `tenant-general-warehouse/<tenant>/` takes files (with read-write membership),
   and `tenant-sql-warehouse/<tenant>/` is the catalog-managed table root.
 - <a id="per-user-write-areas"></a>**Some tenants give each member a personal
-  folder to write in.** In these tenants (for example `globalusers`), everyone
-  in the tenant can read all of `tenant-general-warehouse/<tenant>/`, but you can
+  folder to write in.** In these tenants, everyone in the tenant can read all of `tenant-general-warehouse/<tenant>/`, but you can
   write only under `tenant-general-warehouse/<tenant>/users/<user>/`; the
   tenant's stewards can also write under `root/`. If an upload to the tenant
   folder is denied, put the file in your own `users/<user>/` folder there.

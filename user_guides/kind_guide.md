@@ -31,8 +31,8 @@ pre-warms the app portals.
   account, or add an API key — `CBORG_API_KEY=...` (or `ANTHROPIC_API_KEY=...`)
   — in **⚙ Settings** or in `~/.env`. The doctor view under **⚙ Settings** in
   KIND's top bar tells you what's missing.
-- **Your research state lives in your home** (KOROS runs in
-  `~/koros_projects/runs`, linked from `~/koros/runs`; KIND state under
+- **Your research state lives in your home** (KOROS runs in `~/koros/runs`,
+  on newer setups a link to `~/koros_projects/runs`; KIND state under
   `~/.local/share/king/runs`, or `~/king/runs` while you run your own build) and
   survives pod restarts and culls.
 - **Tables and files you (or an app) create go to two different places.**
@@ -52,7 +52,7 @@ pre-warms the app portals.
 | You land on JupyterLab although you hold a KIND role | Stop + start your server (hub control panel). If the role was granted only minutes ago and you still land on Lab, log out of the hub (`https://hub.berdl.kbase.us/hub/logout`), log back in, then stop + start |
 | KIND shows an error page right after spawn | The server is still booting (~15 s); reload |
 | KIND looks old / no Jupyter button in the top bar (you once installed KIND manually) | The built-in build wins over a leftover `~/.local/bin` install, so a stop + start of your server is enough — unless you created `~/.kind/prefer-user-install` (see *Running your own build*), or an older install left app manifests in `~/.local/share/king/runs/plugins/`: they override the image's app of the same name, so move them aside and relaunch KIND. Your `~/king` checkout and research state are untouched |
-| KOROS features missing after an image update, or `git -C ~/koros status --short` (or `~/semcat`) lists changes | Your checkout has local changes, so the boot refresh left it alone. Stash them (`git -C ~/koros stash -u`) or move the directory aside (`mv ~/koros ~/koros.mine`) and stop + start your server — a clean checkout is refreshed to the image's pinned version automatically, with the previous tree kept under `~/.kind/backups/`. Don't commit the changes: a checkout with a newer commit counts as yours and is never refreshed. Your research runs live in `~/koros_projects/runs` and are not affected (if `~/koros.mine/runs` is a real folder rather than a link, copy it back) |
+| KOROS features missing after an image update, or `git -C ~/koros status --short -- . ':(exclude)runs'` (or `git -C ~/semcat status --short`) lists changes | Your checkout has local changes, so the boot refresh left it alone. Set them aside without touching your research runs — `git -C ~/koros stash push -u -- . ':(exclude)runs'` (for `~/semcat`: `git -C ~/semcat stash -u`) — then stop + start your server: a clean checkout is refreshed to the image's pinned version automatically, with the previous tree kept under `~/.kind/backups/` and your `runs` carried over. **Never run a plain `git stash`, `git checkout .` or `git reset --hard` in `~/koros`:** on many homes `~/koros/runs` is a real folder that git sees as a deleted link, and those commands put the link back and delete your runs. Don't commit the changes either: a checkout with a newer commit counts as yours and is never refreshed |
 | "KBase token expired" although you just logged in | Stop + start your server (a fresh server picks up your current login); if it persists, log out, log in again, then restart. If it still persists and you have a `~/.kbase/token` file (from KBase command-line tools), KIND reads that first — delete or refresh it |
 
 ### Getting the latest KIND version
@@ -80,10 +80,11 @@ python3 -m berdl_notebook_utils.kind_server --restart     # in a hub terminal; t
 
 The KIND command-line tools are **not** on your terminal's `PATH` (the venv is
 kept separate from the notebook's Python). Call them by full path,
-`/opt/berdl/kind/venv/bin/semcat doctor --spark`, or add
-`export PATH="$PATH:/opt/berdl/kind/venv/bin"` to `~/.custom_profile` (append
-it: put first, the KIND venv's own `python3` and `pip` would replace the
-notebook's in every terminal).
+`/opt/berdl/kind/venv/bin/semcat doctor --spark`, or add them to your `PATH`
+for good with
+`printf '\nexport PATH="$PATH:/opt/berdl/kind/venv/bin"\n' >> ~/.custom_profile`
+(at the end of `PATH`: put first, the KIND venv's own `python3` and `pip` would
+replace the notebook's in every terminal).
 
 ### Running your own build of KIND, KOROS or an app
 
@@ -100,7 +101,8 @@ never shadow a newer image — but developers and testers can opt out:
    [Installing your own Python packages](user_guide.md#installing-your-own-python-packages));
    the variables allow it for that one command. This puts `kind`, the capability CLIs
    and the app CLIs in `~/.local/bin`, which is not on a terminal's `PATH`; to put it
-   there for good, add `export PATH="$PATH:$HOME/.local/bin"` to `~/.custom_profile`
+   there for good, run
+   `printf '\nexport PATH="$PATH:$HOME/.local/bin"\n' >> ~/.custom_profile`
    (`~/.bashrc` is reset at every server start).
 2. Opt in: `touch ~/.kind/prefer-user-install` (or, for one launch only, set
    `BERDL_KIND_PREFER_USER_INSTALL=true` in the environment of whatever starts
@@ -233,7 +235,8 @@ the UI locally, enable hub-parity paths: `BERDL_LOCAL_BASE_URL=/user/<you>/`
    server start `13-kind-seed.sh` refreshes a clean, older `~/koros` /
    `~/semcat` to the new refs (previous tree under `~/.kind/backups/`, `runs/`
    carried over). Checkouts with local changes are left alone and named in a
-   `KIND seed NOTICE` in the pod log; ask those users to stash or move them aside
-   (see *If something looks wrong*). Never `rsync` the image's tree over a
+   `KIND seed NOTICE` in the pod log; ask those users to set them aside as in
+   *If something looks wrong* (never a plain `git stash` in `~/koros`, which
+   deletes a real `runs` folder). Never `rsync` the image's tree over a
    checkout: without its `.git` the result reads as locally modified and is never
    refreshed again.

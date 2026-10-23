@@ -160,7 +160,7 @@ hand. It puts each tool in its own environment and its command in `~/.local/bin`
 
 ```bash
 pipx install --system-site-packages <package or git+https://… URL>
-echo 'export PATH="$PATH:$HOME/.local/bin"' >> ~/.custom_profile   # once; then open a new terminal
+printf '\nexport PATH="$PATH:$HOME/.local/bin"\n' >> ~/.custom_profile   # once; then open a new terminal
 ```
 
 `~/.local/bin` is not on your `PATH` until you add it. Add it in `~/.custom_profile`, not

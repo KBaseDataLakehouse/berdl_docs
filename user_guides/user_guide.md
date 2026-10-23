@@ -169,7 +169,7 @@ print(schema)
 
 #### 6.4 Getting Complete Database Structure
 
-Use `get_db_structure()` to see every namespace you can access with its tables and their columns:
+Use `get_db_structure()` to see every namespace you can access with its tables and their columns. It reads every namespace in every catalog you can see, so with many tenants it can take a minute or more; for one namespace, use `get_tables()` and `get_table_schema()` instead:
 
 ```python
 # Get the complete structure: {namespace: {table: [columns]}}
@@ -218,7 +218,7 @@ For a **command-line tool**, use `pipx`, which gives each tool its own environme
 
 ```bash
 pipx install --system-site-packages <package or git+https://… URL>
-echo 'export PATH="$PATH:$HOME/.local/bin"' >> ~/.custom_profile   # once; then open a new terminal
+printf '\nexport PATH="$PATH:$HOME/.local/bin"\n' >> ~/.custom_profile   # once; then open a new terminal
 ```
 
 pipx puts the tool's command in `~/.local/bin`, which is not on your `PATH` until you add
