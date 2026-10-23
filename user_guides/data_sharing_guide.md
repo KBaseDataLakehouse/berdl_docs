@@ -4,7 +4,7 @@
 
 The BERDL (BER Data Lake) JupyterHub platform lets you share datasets with other users through **tenants**: groups whose members share an Iceberg catalog for tables (e.g. `kbase`) and a storage prefix for files.
 
-All data governance functions are **✨ automatically imported** in every notebook - no manual imports needed! This guide shows you how to use these pre-loaded functions for seamless data sharing and collaboration.
+The everyday data governance functions are **✨ automatically imported** in every notebook - no manual imports needed (admin-only group management needs an import; see the [Admin guide](admin_user_management_guide.md)). This guide shows you how to use these pre-loaded functions for data sharing and collaboration.
 
 ## Key Concepts
 
@@ -24,25 +24,33 @@ Each tenant has the same pair, shared by its members:
 
 ### Auto-Imported Functions
 
-All BERDL JupyterHub notebooks automatically import these data governance functions at startup (via `startup.py`), so they're ready to use immediately without any imports:
+Every BERDL notebook imports these data governance functions when its kernel starts, so they're ready to use without any imports:
 
 **Auto-Imported Utility Functions:**
 
 *Core Information:*
 - `check_governance_health()` - Check service status
-- `get_credentials()` - Get your S3 and Polaris credentials (sets environment variables)
+- `get_credentials()` - Get your S3 and Polaris credentials (sets environment variables). Assign the result (`creds = get_credentials()`) so the secrets are not printed into your notebook
 - `get_my_sql_warehouse()` - Get your SQL warehouse root (list-only at the top; tables go under it via `create_namespace_if_not_exists()`, files under `users-general-warehouse/<user>/`)
 - `get_my_workspace()` - Get comprehensive workspace information
 - `get_my_groups()` - Get list of groups you belong to
 - `get_my_policies()` - Get detailed policy information
 - `get_my_accessible_paths()` - Get every S3 prefix you can read
 
-*Admin Functions (Tenant/Group Management):*
-- `create_tenant_and_assign_users(tenant_name, usernames)` - Create tenant and add users (admin only)
-- `get_group_sql_warehouse(group_name)` - Get SQL warehouse prefix for a group
+*Tenant Functions:*
+- `list_tenants()` - Every tenant, with member counts and whether you are a member or steward
+- `show_my_tenants()` - Print the tenants you belong to, with description, stewards and storage paths (`show_databases=True` adds namespaces and tables)
+- `get_tenant_detail(tenant_name)` - One tenant's description, stewards and storage paths
+- `get_group_sql_warehouse(group_name)` - Get the table root of a tenant you belong to
+- `list_available_groups()`, `request_tenant_access(tenant_name, permission, justification)` - Ask to join a tenant
+- `add_tenant_member(tenant_name, username, permission="read_write")`, `remove_tenant_member(tenant_name, username)` - Add or remove members (tenant stewards and admins)
+
+*Admin Functions:*
+- `create_tenant_and_assign_users(tenant_name, usernames)` - Create a tenant and add users (admin only)
 
 **Pre-Initialized Client:**
-- `governance` - Pre-initialized `DataGovernanceClient()` instance for advanced operations
+- `governance` - The low-level governance API client, created when the kernel starts. Prefer the functions above; for a raw API call, get a current client with `get_governance_client()`
+
 **Other Auto-Imported Functions:**
 - `get_spark_session()` - Create Spark sessions with your Iceberg catalogs
 - `create_namespace_if_not_exists()` - Create namespaces in your personal catalog or, with `tenant_name=`, a tenant catalog
@@ -150,7 +158,7 @@ ns = create_namespace_if_not_exists(spark, "research", tenant_name="kbase")
 df.writeTo(f"{ns}.climate_data").createOrReplace()
 ```
 
-To share files that are not tables (CSV, TSV, raw exports), put them under the tenant's file prefix, `s3a://cdm-lake/tenant-general-warehouse/<tenant>/`.
+To share files that are not tables (CSV, TSV, raw exports), put them under the tenant's file prefix, `s3a://cdm-lake/tenant-general-warehouse/<tenant>/`. Writing there needs read-write membership; read-only members can browse and download. Some tenants give each member a personal folder instead (`users/<username>/`); if a write to the tenant folder is denied, write under that folder (see the [S3 guide](s3_guide.md#per-user-write-areas)).
 
 To give someone access, add them to the tenant: a steward uses `add_tenant_member()`, and anyone can ask to join with `request_tenant_access()` (see [Requesting Tenant Access](requesting-tenant-access.md)). There is no per-table or per-path sharing; access follows tenant membership.
 
@@ -199,7 +207,7 @@ print(f"📊 Loaded shared table with {shared_df.count()} rows")
 shared_df.show(5)
 ```
 
-If the query fails with a permission error, confirm you are a member of the tenant with `get_my_groups()` and request access if you are not (see [Requesting Tenant Access](requesting-tenant-access.md)).
+If the query fails with `TABLE_OR_VIEW_NOT_FOUND` or a permission error, check `get_my_groups(force_refresh=True)`. Spark only knows the catalogs of tenants you belong to, so a tenant you are not in looks like a missing table. If the tenant is missing, request access (see [Requesting Tenant Access](requesting-tenant-access.md)); if you were just added, restart Spark Connect first (see [After Your Request Is Approved](requesting-tenant-access.md#after-your-request-is-approved)).
 
 > **Delta Lake is retired:** tables that used to be shared as Delta paths or `u_<user>__<db>` / `<tenant>_<db>` databases are now Iceberg tables. See [Delta Lake Retirement](iceberg_migration_guide.md) for their new names.
 
@@ -209,15 +217,12 @@ If the query fails with a permission error, confirm you are a member of the tena
 
 1. **Table Not Found**: Ensure the table exists and you have access
    ```python
-   # Check if table exists in your accessible workspace
-   workspace = get_my_workspace()
-   sql_warehouse = get_my_sql_warehouse()
-   print(f"Your SQL warehouse: {sql_warehouse.sql_warehouse_prefix}")
-   print(f"Accessible paths: {workspace.accessible_paths}")
-   
-   # List the namespaces you can see across your personal and tenant catalogs
+   # Namespaces you can see across your personal and tenant catalogs
    get_databases()
+   # Tables in one namespace
+   get_tables("kbase.research")
    ```
+   Tenant tables are named `<tenant>.<namespace>.<table>`; if the tenant was added after your server started, restart Spark Connect first (item 5).
 
 2. **User Not Found**: Verify usernames are correct and users exist in the system
 

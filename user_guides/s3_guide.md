@@ -14,13 +14,19 @@ When your notebook server starts, BERDL writes two standard AWS files for you:
 | `~/.aws/credentials` | Your S3 access key and secret key (the `[default]` profile). |
 | `~/.aws/config` | The S3 endpoint (`endpoint_url`) and region for the `[default]` profile. |
 
-Because these are the standard locations the AWS SDKs and CLI read, any tool that
-speaks S3 — the `aws` CLI, `boto3`, `s3fs`/`pandas`, `duckdb` — finds your
-credentials and the right endpoint with no configuration.
+Because these are the standard locations the AWS SDKs and CLI read, the `aws`
+CLI, `boto3` and `s3fs`/`pandas` find your credentials and the right endpoint
+with no configuration.
 
-> **Managed files — do not edit.** BERDL owns `~/.aws/credentials` and
-> `~/.aws/config` and overwrites them on startup and on every credential
-> rotation. Hand edits will be lost.
+> **Managed files.** BERDL rewrites the `[default]` profile of
+> `~/.aws/credentials` on startup and on every credential rotation, and the
+> `[default]` profile of `~/.aws/config` on startup. Edits to `[default]` will be
+> lost; other profiles you add are kept.
+
+> **Public AWS buckets:** the endpoint is also set in environment variables, so
+> every S3 call goes to BERDL storage, even one for a public AWS bucket. To read
+> a public AWS bucket, give the AWS endpoint explicitly:
+> `aws s3 ls s3://<public-bucket>/ --no-sign-request --endpoint-url https://s3.amazonaws.com`.
 
 ## Using the AWS CLI
 
@@ -30,26 +36,29 @@ The `aws` CLI is pre-installed and pre-configured. Just use it:
 # List your buckets
 aws s3 ls
 
-# List the contents of a bucket
-aws s3 ls s3://cdm-lake/
+# List your own files
+aws s3 ls s3://cdm-lake/users-general-warehouse/<user>/
 
 # Upload a file
-aws s3 cp ./local_file.parquet s3://<bucket>/path/to/local_file.parquet
+aws s3 cp ./local_file.parquet s3://cdm-lake/users-general-warehouse/<user>/path/to/local_file.parquet
 
 # Download a file
-aws s3 cp s3://<bucket>/path/to/file.parquet ./file.parquet
+aws s3 cp s3://cdm-lake/users-general-warehouse/<user>/path/to/file.parquet ./file.parquet
 
 # Sync a directory (recursive)
-aws s3 sync ./local_dir/ s3://<bucket>/path/to/dir/
+aws s3 sync ./local_dir/ s3://cdm-lake/users-general-warehouse/<user>/path/to/dir/
 ```
 
+Replace `<user>` with your KBase username (in a terminal, `$NB_USER` holds it).
 No `--endpoint-url` and no access keys are needed — they come from the managed
-`~/.aws` files.
+`~/.aws` files. You can't list a bucket itself (`aws s3 ls s3://cdm-lake/` is
+denied), only the folders you have access to; see
+[What you can access](#what-you-can-access-and-why-you-get-accessdenied).
 
 ## Using Python (boto3)
 
-Create a client with **no arguments** — `boto3` reads your credentials from
-`~/.aws/credentials` and the endpoint from `~/.aws/config`:
+Create a client with **no arguments** — `boto3` finds your credentials and the
+endpoint on its own:
 
 ```python
 import boto3
@@ -60,19 +69,21 @@ s3 = boto3.client("s3")
 for bucket in s3.list_buckets()["Buckets"]:
     print(bucket["Name"])
 
-# Upload / download
-s3.upload_file("local_file.parquet", "my-bucket", "path/to/local_file.parquet")
-s3.download_file("my-bucket", "path/to/file.parquet", "file.parquet")
+# Upload / download (replace <user> with your KBase username)
+s3.upload_file("local_file.parquet", "cdm-lake", "users-general-warehouse/<user>/path/to/local_file.parquet")
+s3.download_file("cdm-lake", "users-general-warehouse/<user>/path/to/file.parquet", "file.parquet")
 ```
 
 `pandas` (via `s3fs`) works the same way — it picks up the same credentials, so
-`pd.read_parquet("s3://my-bucket/path/to/file.parquet")` just works.
+`pd.read_parquet("s3://cdm-lake/users-general-warehouse/<user>/path/to/file.parquet")`
+just works.
 
 ## The `lakehouse_minio` folder in the file browser
 
 The JupyterLab file browser shows your object storage as a folder named
-`lakehouse_minio` (also under **FAVORITES → Lakehouse Objectstore**). You can
-browse, open, upload and download files there with the mouse.
+`lakehouse_minio` (most accounts also have it under **FAVORITES → Lakehouse
+Objectstore**; to add it, right-click the folder and choose **Add Favorite**).
+You can browse, open, upload and download files there with the mouse.
 
 It is a view of S3, not a folder on disk, so it exists **only in the file
 browser**. A terminal (`ls ~`), Python's `open()` or `os.listdir()`, and shell
@@ -83,7 +94,7 @@ folder with the AWS CLI, `boto3` or `pandas`:
 |---|---|---|
 | `lakehouse_minio/my-files` | `s3://cdm-lake/users-general-warehouse/<user>/` | Your files (read/write) |
 | `lakehouse_minio/my-sql` | `s3://cdm-lake/users-sql-warehouse/<user>/` | Your tables, managed by the catalog (see below) |
-| `lakehouse_minio/<tenant>-files` | `s3://cdm-lake/tenant-general-warehouse/<tenant>/` | A tenant's files (read/write) |
+| `lakehouse_minio/<tenant>-files` | `s3://cdm-lake/tenant-general-warehouse/<tenant>/` | A tenant's files (read/write; in [some tenants](#per-user-write-areas) you write only under `users/<user>/`) |
 | `lakehouse_minio/<tenant>-sql` | `s3://cdm-lake/tenant-sql-warehouse/<tenant>/` | A tenant's tables |
 | `lakehouse_minio/<tenant>-files-ro`, `<tenant>-sql-ro` | The same two tenant paths | Tenants you have read-only access to |
 
@@ -96,8 +107,8 @@ aws s3 ls s3://cdm-lake/users-general-warehouse/<user>/
 
 A few notes:
 
-- **Large files:** upload multi-GB files with `aws s3 cp` rather than the file
-  browser, which holds the whole file in memory while it uploads.
+- **Large files:** upload multi-GB files with `aws s3 cp`: it is faster than the
+  file browser and doesn't depend on your browser tab staying open.
 - **New tenants:** after you're added to a tenant, its folders appear here within
   about a minute; see [Requesting Tenant Access](requesting-tenant-access.md).
 
@@ -114,14 +125,16 @@ aws s3 ls                                                     # your buckets
 aws s3 ls s3://cdm-lake/users-general-warehouse/<user>/       # your files (read/write)
 aws s3 ls s3://cdm-lake/users-sql-warehouse/<user>/           # your tables (list-only root, see below)
 aws s3 ls s3://cdm-lake/tenant-general-warehouse/<tenant>/    # a tenant's files (if you belong to it)
+aws s3 ls s3://cdm-spark-job-logs/spark-job-logs/<user>/      # your Spark event logs
 ```
 
 Paths that return `AccessDenied` by design:
 
 ```bash
+aws s3 ls s3://cdm-lake/                                         # a whole bucket
 aws s3 cp f.tsv s3://cdm-lake/users-sql-warehouse/<user>/f.tsv   # a table root, not a file drop (see below)
 aws s3 ls s3://cdm-lake/tenant-general-warehouse/                # spans every tenant
-aws s3 ls s3://cdm-spark-job-logs/                               # Spark event logs (see below)
+aws s3 ls s3://cdm-spark-job-logs/                               # every user's Spark event logs
 ```
 
 A few things that commonly trip people up:
@@ -134,9 +147,17 @@ A few things that commonly trip people up:
   policy only allows writes inside its governed `iceberg/` child, which Polaris
   manages for your `my` catalog. Create namespaces with
   `create_namespace_if_not_exists()` and write tables through Spark; never build
-  a table path by hand from `get_my_sql_warehouse()`. Tenants work the same way:
-  `tenant-general-warehouse/<tenant>/` takes files, and
-  `tenant-sql-warehouse/<tenant>/` is the catalog-managed table root.
+  a table path by hand from `get_my_sql_warehouse()`. You may also see
+  `u_<user>__…` folders under `users-sql-warehouse/<user>/`: they hold your old
+  Delta tables (see the [Iceberg Migration Guide](iceberg_migration_guide.md)),
+  are read-only, and will be deleted. Tenants work the same way:
+  `tenant-general-warehouse/<tenant>/` takes files (with read-write membership),
+  and `tenant-sql-warehouse/<tenant>/` is the catalog-managed table root.
+- <a id="per-user-write-areas"></a>**Some tenants give each member a personal
+  folder to write in.** In these tenants, everyone in the tenant can read all of `tenant-general-warehouse/<tenant>/`, but you can
+  write only under `tenant-general-warehouse/<tenant>/users/<user>/`; the
+  tenant's stewards can also write under `root/`. If an upload to the tenant
+  folder is denied, put the file in your own `users/<user>/` folder there.
 - **You can't list a whole bucket, or a parent prefix that spans other
   users/tenants** — only the specific prefixes your policy grants (your
   `users-general-warehouse/<user>/` and `users-sql-warehouse/<user>/`, and the
@@ -146,9 +167,10 @@ A few things that commonly trip people up:
   `aws s3 ls s3://cdm-lake/tenant-general-warehouse/kbase` matches every prefix
   *starting with* `kbase`, so it lists both `kbase/` and `kbaseincubator/`. Add
   the trailing slash (`…/kbase/`) to list inside just that one.
-- **`cdm-spark-job-logs` is effectively write-only for you** — it holds the Spark
-  event logs the platform writes on your behalf, and your policy doesn't grant you
-  `ListBucket` there, so `aws s3 ls` on it is denied even for your own prefix.
+- **`cdm-spark-job-logs` holds the Spark event logs the platform writes for
+  you.** You can list and read only your own folder,
+  `aws s3 ls s3://cdm-spark-job-logs/spark-job-logs/<user>/`; listing the bucket
+  itself is denied.
 
 To see exactly which prefixes you're entitled to, run in a notebook cell:
 
@@ -161,13 +183,16 @@ get_my_policies()           # the raw IAM policy, including its s3:prefix condit
 ## Credentials are kept current automatically
 
 Your S3 credentials change only when they are rotated (by you, or by an
-administrator). You do **not** need to reconfigure anything when they do:
+administrator). Most tools follow a rotation on their own:
 
-- `~/.aws/credentials` is rewritten with the new secret, and the AWS CLI and
-  `boto3` re-read that file on every call — so they always use current
-  credentials, even immediately after a rotation.
-- New terminals and new notebook kernels automatically pick up the latest
-  credentials.
+- **Terminals:** the `aws` CLI and scripts you start in a terminal read
+  `~/.aws/credentials`, which is rewritten with the new secret. A terminal that
+  is already open picks up the change at its next prompt.
+- **New notebook kernels** fetch your current credentials when they start, and
+  the notebook you rotated in is updated in the same step.
+- **Notebooks that were already open** keep the old secret for `boto3`, `pandas`
+  and `!aws`. In each one, run `refresh_spark_environment()` (without
+  `rotate=True`) or restart the kernel.
 
 You can also trigger a rotation yourself from any notebook cell:
 
@@ -177,7 +202,8 @@ refresh_spark_environment(rotate=True)
 
 This rotates your S3 (and Polaris) credentials with the platform, refreshes your
 Spark session, and updates `~/.aws/credentials` in the same step. After it runs,
-`aws s3 ls` and `boto3` continue to work with no further action. Rotate only
+`aws s3 ls` in a terminal and `boto3` in this notebook keep working; other open
+notebooks need the step above. Rotate only
 when you need new credentials (for example, after a secret was exposed): the old
 ones stop working at once in every other notebook and script. To fix S3 or Spark
 errors, work through [Fixing Spark Problems](user_guide.md#fixing-spark-problems)
@@ -210,8 +236,9 @@ print(os.environ["S3_ACCESS_KEY"])   # access key
 The steps above cover the notebook environment. To reach the object store from
 your own machine, you need the KBase SSH tunnel and your S3 keys.
 
-**1. Get your keys** from a notebook: `aws configure get aws_access_key_id` and
-`aws configure get aws_secret_access_key`.
+**1. Get your keys** in a notebook terminal: `aws configure get aws_access_key_id`
+and `aws configure get aws_secret_access_key`. Copy them again after a credential
+rotation.
 
 **2. Open an SSH tunnel** to KBase (a SOCKS5 proxy on port 1338):
 
@@ -226,18 +253,17 @@ ssh -f -D 1338 -N <ac.anl_username>@login.kbase.us
   ports only. Use a different local port if 1338 is taken.
 - Verify with `ps aux | grep "ssh -f -D 1338"`; stop it later with `kill <PID>`.
 
-**3. Configure a local AWS profile** for your environment's S3 endpoint and route
-it through the proxy:
+**3. Configure a local AWS profile** with the same S3 endpoint your notebook
+uses:
 
 | Environment | S3 endpoint |
 |-------------|-------------|
-| Development | `https://minio.dev.berdl.kbase.us` |
+| Development | `https://minio.dev.berdl.kbase.us:31276` |
 | Staging | `https://minio.stage.berdl.kbase.us` |
 | Production | `https://minio.berdl.kbase.us` |
 
-> **⚠️ Endpoints may change.** These are the **legacy MinIO** URLs. BERDL is
-> migrating object storage to Ceph, so the endpoint for your environment may be
-> different — confirm the current S3 endpoint with a BERDL admin.
+If an endpoint changes, `aws configure get endpoint_url` in a notebook terminal
+always shows the current one.
 
 ```bash
 # Use the endpoint for your environment (production shown)
@@ -245,10 +271,24 @@ aws configure set aws_access_key_id     <your_access_key>            --profile b
 aws configure set aws_secret_access_key <your_secret_key>            --profile berdl
 aws configure set endpoint_url          https://minio.berdl.kbase.us --profile berdl
 aws configure set region                us-east-1                    --profile berdl
-
-# Route S3 traffic through the SOCKS proxy for this command
-HTTPS_PROXY=socks5://127.0.0.1:1338 aws s3 ls --profile berdl
 ```
+
+**4. Route the AWS CLI through the tunnel.** The AWS CLI and `boto3` can't use a
+SOCKS proxy directly, so run a small local HTTP proxy that forwards into the
+tunnel, and point the CLI at it:
+
+```bash
+# Terminal 1: an HTTP-to-SOCKS bridge (needs uv, https://docs.astral.sh/uv/;
+# any HTTP-to-SOCKS proxy works)
+uvx pproxy -l http://127.0.0.1:3128 -r socks5://127.0.0.1:1338
+
+# Terminal 2
+HTTPS_PROXY=http://127.0.0.1:3128 aws s3 ls s3://cdm-lake/users-general-warehouse/<user>/ --profile berdl
+```
+
+Laptop `boto3` scripts need the same `HTTPS_PROXY=http://127.0.0.1:3128` and
+`boto3.Session(profile_name="berdl").client("s3")`. The MinIO client `mc`
+accepts the SOCKS proxy directly; see the [MinIO Guide](minio_guide.md).
 
 > **⚠️ Proxy scope:** exporting `HTTPS_PROXY`/`HTTP_PROXY` routes *all* traffic in
 > that shell through the tunnel. Set it inline (as above) or use a dedicated

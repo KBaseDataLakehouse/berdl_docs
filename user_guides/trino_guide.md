@@ -26,7 +26,7 @@ print(cur.fetchall())
 
 Behind the scenes, the helper:
 
-1. Fetches your MinIO (S3) credentials from the governance API
+1. Fetches your S3 (MinIO) and Polaris credentials from the governance API
 2. Creates your personal Iceberg catalog (`{username}`) backed by Polaris and makes it the connection's default catalog
 3. Passes your KBase token to Trino so tenant membership can be resolved for access control
 
@@ -41,6 +41,8 @@ conn = trino.dbapi.connect(
     extra_credential=[("kbase_auth_token", os.environ["KBASE_AUTH_TOKEN"])],
 )
 ```
+
+Such a connection has no default catalog and does not create your personal catalog: `{username}` tables are only there after `get_trino_connection()` has run since Trino last restarted, so call it once first.
 
 ### Results as a pandas DataFrame
 
@@ -132,7 +134,7 @@ cur.execute("""
 
 - **Personal catalog**: only you can access `{username}`. Other users' catalogs are blocked.
 - **Tenant catalogs**: visible only to tenant members. Membership is resolved from the governance API using your KBase token. To join a tenant, see [Requesting Tenant Access](requesting-tenant-access.md).
-- **Read-only**: `INSERT`, `CREATE SCHEMA`, `DROP TABLE`, and all other write operations are denied on every catalog.
+- **Read-only**: `INSERT`, `CREATE SCHEMA`, `DROP TABLE`, and all other write operations are denied on every catalog. (The one exception is your personal catalog's definition, which `get_trino_connection()` creates and replaces for you — don't `DROP CATALOG` it yourself.)
 
 ## Troubleshooting
 
@@ -144,7 +146,7 @@ cur.execute("""
    conn = get_trino_connection()
    ```
 
-2. If that does not help, refresh your environment and connect again. The refresh returns the status of each step, so you can see which one failed:
+2. If that does not help, refresh your environment and connect again. This also stops your Spark session and restarts your Spark Connect server (run `spark = get_spark_session()` again afterwards if you use Spark). The refresh returns the status of each step, so you can see which one failed:
 
    ```python
    refresh_spark_environment()
@@ -168,9 +170,11 @@ For Spark problems, see [Fixing Spark Problems](user_guide.md#fixing-spark-probl
 conn = get_trino_connection()        # picks up your fresh token and credentials automatically
 ```
 
-A connection object created **before** the expiry does not heal itself: it keeps sending your old token with every query. Within a few minutes it silently loses access to **tenant** catalogs (queries start failing with access errors) while queries against your **personal** catalog may still work — which makes a stale connection easy to mistake for a permissions problem. There is no way to refresh an existing connection; discard it and call `get_trino_connection()` again. The same rule applies after a credential rotation.
+A connection object created **before** the expiry keeps sending your old token with every query, and there is no way to refresh it. It may keep working for a while, because Trino reuses the tenant memberships it last looked up for you, but it can start failing with access errors at any time (for example after Trino restarts) — which makes a stale connection easy to mistake for a permissions problem. Discard it and call `get_trino_connection()` again. The same rule applies after a credential rotation.
 
-**`ICEBERG_CATALOG_ERROR: Cannot obtain metadata` on your personal catalog** (from `get_trino_connection()` or from queries on `{username}`): Trino could not load your personal catalog because Polaris rejected the credential it was created with, usually because your credentials were rotated in another process at the same moment. Call `get_trino_connection()` again, which re-creates the catalog. If the error keeps coming back, contact an administrator: on older Trino versions such a catalog can only be cleared by a Trino restart. Tenant catalogs are not affected.
+**`get_trino_connection()` prints a warning about your personal catalog** (`Polaris rejects the credential for your personal Trino catalog …`, `Polaris could not be reached …`, or `Trino cannot load your personal catalog …`) **or queries on `{username}` fail with `ICEBERG_CATALOG_ERROR`:** the connection is still returned and tenant catalogs work, but it has no default catalog, so two-part `schema.table` names fail. This usually means your credentials were rotated in another process at the same moment, or Polaris was briefly unreachable. Call `get_trino_connection()` again; if the warning keeps coming back, contact an administrator. Tenant catalogs are not affected.
+
+**`Catalog '<your username>' not found`** (for example after Trino was restarted): call `get_trino_connection()` again — it re-creates your personal catalog.
 
 **A tenant catalog is missing from `SHOW CATALOGS`:** tenant catalogs are provisioned by platform automation, not by your notebook session. Confirm you are a member of the tenant; if you are and the catalog still does not appear, contact an administrator.
 

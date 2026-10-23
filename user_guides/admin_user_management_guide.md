@@ -53,8 +53,10 @@ print("-" * 60)
 for user in users.users:
     groups_str = ", ".join(user.groups) if user.groups else "None"
     print(f"{user.username:<20} {groups_str}")
-print(f"\nTotal Jupyterhub users: {users.retrieved_count}")
+print(f"\nTotal Jupyterhub users: {users.total_count}")
 ```
+
+`list_users()` returns up to 500 users per page (`list_users(page=2)` for more) and is slow, because it loads each user's policies. For names only, use `list_user_names()` (same import).
 
 ---
 
@@ -85,7 +87,7 @@ Create a new tenant (group) with optional initial members:
 ```python
 from berdl_notebook_utils.governance import create_tenant_and_assign_users
 
-# Create tenant without members
+# Create tenant (you, the creator, are its only member)
 result = create_tenant_and_assign_users("kbase")
 
 # Create tenant with initial members
@@ -98,6 +100,8 @@ result = create_tenant_and_assign_users(
 print(result["create_tenant"])  # Tenant creation status
 print(result["add_members"])    # List of (username, status) tuples
 ```
+
+Tenant names must be 2–64 lowercase letters and digits, start with a letter, and not end in `ro` (that suffix is reserved: creating `kbase` also creates the read-only group `kbasero`). Some names are reserved (for example `admin`, `public`, `default`). You, the creator, are added to both groups; remove yourself afterwards with `remove_tenant_member()` if you shouldn't be a member.
 
 ### Add Users to a Group
 
@@ -167,6 +171,26 @@ for username, response in results:
         print(f"Error removing {username}: {response}")
 ```
 
+> [!WARNING]
+> `add_group_member` / `remove_group_member` change **one group only**. Adding someone to `kbase` who is already in `kbasero` leaves them in both, and removing someone from `kbase` leaves their read-only access and any steward role. To move a member between read-only and read-write, or to remove them completely, use the tenant functions below.
+
+### Tenant Members and Stewards
+
+These functions are auto-imported in every notebook and keep a tenant's two groups consistent:
+
+```python
+# Add a member, or move an existing member between read-write and read-only
+add_tenant_member("kbase", "alice", permission="read_only")   # default: "read_write"
+
+# Remove a member from both groups (this also drops their steward role)
+remove_tenant_member("kbase", "alice")
+
+# Stewards (admin only): a steward can add and remove members and edit the
+# tenant's description with update_tenant_metadata()
+assign_steward("kbase", "bob")     # bob must already be a member
+remove_steward("kbase", "bob")     # bob stays a member
+```
+
 ---
 
 ## Operations Summary
@@ -180,6 +204,9 @@ for username, response in results:
 | Add members (RO) | `add_group_member(group, usernames, read_only=True)` | Add users to read-only group |
 | Remove members (R/W) | `remove_group_member(group, usernames)` | Remove users from read/write group |
 | Remove members (RO) | `remove_group_member(group, usernames, read_only=True)` | Remove users from read-only group |
+| Add or move a tenant member | `add_tenant_member(tenant, username, permission=...)` | Add a user, or switch them between read-write and read-only |
+| Remove a tenant member | `remove_tenant_member(tenant, username)` | Remove a user from both groups and their steward role |
+| Assign / remove a steward | `assign_steward(tenant, username)`, `remove_steward(tenant, username)` | Let a member manage the tenant's members (admin only) |
 
 ---
 
@@ -193,4 +220,4 @@ To obtain the `CDM_JUPYTERHUB_ADMIN` role:
 4. Log out and log back into JupyterHub for changes to take effect
 
 > [!NOTE]
-> Admin operations will fail with an authentication error if you don't have the required role.
+> Without the role, these calls return an error response (HTTP 403, "Administrator privileges required for this operation") instead of data; print the returned value to see it.
