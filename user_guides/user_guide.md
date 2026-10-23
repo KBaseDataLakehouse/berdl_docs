@@ -180,18 +180,44 @@ for namespace, tables in db_structure.items():
 
 ## Installing your own Python packages
 
-Install extra packages into a **virtual environment or conda environment**, not with
-`pip install --user`. Packages under `~/.local` are invisible to the notebook server,
-terminals and KIND on purpose (`PYTHONNOUSERSITE=1`): a `--user` package shadows the
-image's copy, survives every image upgrade, and can stop your server from starting.
-Notebook kernels still see `~/.local` for compatibility, but new `--user` installs from a
-terminal are refused.
+In a terminal, `pip install` only works inside an activated **virtual environment**.
+Outside one it stops with `ERROR: Could not find an activated virtualenv (required)`. The
+image's own Python environment is read-only as well, so `pip`, `uv` and `conda install`
+cannot change it. Create a venv once and install into it:
 
 ```bash
-python -m venv ~/envs/myproj && source ~/envs/myproj/bin/activate
-pip install <package>
+python -m venv --system-site-packages ~/envs/myproj && source ~/envs/myproj/bin/activate
+pip install ipykernel <package>
 python -m ipykernel install --user --name myproj --display-name "Python (myproj)"   # optional: use it as a kernel
 ```
+
+`--system-site-packages` keeps the image's packages (PySpark, pandas,
+`berdl_notebook_utils`) available inside the venv; leave it out for a fully isolated
+environment. The [custom packages guide](custom_packages_guide.md) walks through this step
+by step.
+
+For **tools from conda** (for example bioconda programs such as BLAST or HMMER), create a
+conda environment in your home; it persists across server restarts:
+
+```bash
+conda create -p ~/envs/bio -c conda-forge -c bioconda <tool>
+eval "$(conda shell.bash hook)" && conda activate ~/envs/bio   # or run one command: conda run -p ~/envs/bio <tool>
+```
+
+For a **command-line tool** (for example a KIND app you install yourself), use `pipx`,
+which gives each tool its own environment:
+
+```bash
+pipx install --system-site-packages <package or git+https://… URL>
+pipx ensurepath   # once, then open a new terminal so the tool is on your PATH
+```
+
+In a notebook, `%pip install <package>` still works: it installs into `~/.local`, which
+only notebook kernels see (in one of your venv kernels it installs into that venv). The
+notebook server, terminals and KIND ignore `~/.local` on purpose (`PYTHONNOUSERSITE=1`): a
+package there would shadow the image's copy and survive every image upgrade, which is how
+a stray `pip install --user` once stopped servers from starting. Don't work around it with
+`PYTHONPATH=~/.local/...`.
 
 ## Troubleshooting
 
