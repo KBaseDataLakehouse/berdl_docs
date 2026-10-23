@@ -212,12 +212,14 @@ pipx install --system-site-packages <package or git+https://… URL>
 pipx ensurepath   # once, then open a new terminal so the tool is on your PATH
 ```
 
-In a notebook, `%pip install <package>` still works: it installs into `~/.local`, which
-only notebook kernels see (in one of your venv kernels it installs into that venv). The
-notebook server, terminals and KIND ignore `~/.local` on purpose (`PYTHONNOUSERSITE=1`): a
-package there would shadow the image's copy and survive every image upgrade, which is how
-a stray `pip install --user` once stopped servers from starting. Don't work around it with
-`PYTHONPATH=~/.local/...`.
+In a notebook, the same rule applies: `%pip install <package>` works in one of your venv
+kernels (it installs into that venv) and stops with the same message in the default
+**Python 3** kernel. Create a venv kernel as shown above and switch the notebook to it.
+Nothing new goes into `~/.local`, where a package would shadow the image's copy — and, for a
+package that ships a JupyterLab extension, override the image's extension in your browser.
+The notebook server, terminals and KIND ignore `~/.local` on purpose
+(`PYTHONNOUSERSITE=1`), which is how a stray `pip install --user` once stopped servers from
+starting. Don't work around it with `PYTHONPATH=~/.local/...`.
 
 ## Troubleshooting
 

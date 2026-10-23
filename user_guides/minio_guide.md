@@ -171,7 +171,8 @@ Download and install the MinIO Client (`mc`) from the [MinIO official website](h
 
 The following Python script demonstrates how to interact with MinIO using the `boto3` library.
 
-Ensure you have the `boto3` library installed:
+`boto3` is already installed in BERDL notebooks. To run the script on your own machine,
+install it there first:
 
 ```bash
 pip install boto3

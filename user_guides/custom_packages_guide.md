@@ -254,18 +254,21 @@ If the environment doesn't exist, create it first with `python -m venv ~/my_venv
 
 Symptoms: an import in a notebook fails or behaves differently than in a terminal (for
 example a version conflict), or a command in `~/.local/bin` fails in a terminal with
-`ModuleNotFoundError`. Cause: a package landed in `~/.local`, from `%pip install` in a
-notebook or an older `pip install --user`. Notebook kernels load `~/.local` ahead of the
-image's packages; the notebook server, terminals and KIND ignore it.
+`ModuleNotFoundError`, or a JupyterLab widget or chart renders wrongly. Cause: an older
+`%pip install` in a notebook or `pip install --user` left a package in `~/.local` (new ones
+are refused now). Notebook kernels load `~/.local` ahead of the image's packages, and
+JupyterLab loads extensions from `~/.local/share/jupyter/labextensions` ahead of the
+image's; the notebook server, terminals and KIND ignore `~/.local` Python packages.
 
 1. See what's there:
    ```bash
-   ls ~/.local/lib/python*/site-packages/
+   ls ~/.local/lib/python*/site-packages/ ~/.local/share/jupyter/labextensions/
    ```
-2. Remove the package from a notebook cell, then restart the kernel
-   (**Kernel** → **Restart Kernel**):
+2. Remove the package from a notebook cell running the default **Python 3** kernel (pip
+   refuses changes outside a venv, so the variable allows this one cleanup), then restart
+   the kernel (**Kernel** → **Restart Kernel**) and reload the browser tab:
    ```python
-   %pip uninstall -y <package>
+   !PIP_REQUIRE_VIRTUALENV=0 pip uninstall -y <package>
    ```
 3. For a command-line tool, also delete its leftover script and reinstall it with pipx
    (see [Command-Line Tools](#command-line-tools)):
