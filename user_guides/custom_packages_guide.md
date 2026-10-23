@@ -21,7 +21,7 @@ The `--system-site-packages` flag allows your custom environment to inherit all 
 
 You can name the environment anything you like (e.g., `~/ml_env`, `~/viz_env`, etc.)
 
-> **💡 Tip:** If you want an environment without the image's packages instead, omit the `--system-site-packages` flag (only PySpark stays importable; pandas, `berdl_notebook_utils` and the pre-loaded helpers do not):
+> **💡 Tip:** If you want an environment without the image's packages instead, omit the `--system-site-packages` flag (only PySpark stays importable; pandas, `berdl_notebook_utils` and the pre-loaded helpers do not). Such a venv also lacks `ipykernel`, so add it to your installs in Step 5 (`pip install ipykernel <packages>`) to use the venv as a kernel:
 > ```bash
 > python -m venv ~/my_isolated_env
 > ```
@@ -60,25 +60,25 @@ python -c "from berdl_notebook_utils import get_spark_session; print('BERDL util
 > `~/.local` shadows the image's copy in your notebooks (see
 > [Troubleshooting](#a-package-in-local-is-breaking-my-notebooks)).
 
-Install the packages you need that the image doesn't already have, plus `ipykernel` (it lets you use this venv as a notebook kernel in Step 6). In this example, we'll install `xgboost`:
+Install only the packages the image doesn't already have. Your venv was created with `--system-site-packages` (Step 2), so it already sees every package in the image, including `ipykernel`, which Step 6 uses. In this example, we'll install `xgboost`:
 
 ```bash
-pip install ipykernel xgboost
+pip install xgboost
 ```
 
 > **💡 General Pattern:**
 > ```bash
-> pip install ipykernel <additional-packages>
+> pip install <additional-packages>
 > ```
 > Replace `<additional-packages>` with the packages you need (e.g., `xgboost`, `polars`, `tensorflow`, etc.)
 
 You can install multiple packages at once:
 
 ```bash
-pip install ipykernel xgboost lightgbm polars
+pip install xgboost lightgbm polars
 ```
 
-Since you're using `--system-site-packages`, you don't need to reinstall packages that are already in the base BERDL environment. Already in the image (no install needed): pandas, PySpark, SciPy, scikit-learn, statsmodels, matplotlib, seaborn, plotly, bokeh, altair, Biopython, scikit-bio, scanpy, umap-learn, networkx, boto3.
+Already in the image (no install needed): pandas, PySpark, SciPy, scikit-learn, statsmodels, matplotlib, seaborn, plotly, bokeh, altair, Biopython, scikit-bio, scanpy, umap-learn, networkx, boto3, ipykernel.
 
 > **🧩 Widgets:** JupyterLab loads extensions only from the image, so a package that needs its own JupyterLab extension (e.g. `ipyleaflet` and most ipywidgets add-ons) installs in your venv, but its widgets won't display. Ask the BERDL Platform team to add it to the image. Plotly and anywidget-based widgets work.
 
@@ -129,21 +129,21 @@ You can create multiple virtual environments for different projects or purposes:
 # Machine learning environment (inherits BERDL packages + adds ML tools)
 python -m venv --system-site-packages ~/ml_env
 source ~/ml_env/bin/activate
-pip install tensorflow xgboost ipykernel
+pip install tensorflow xgboost
 python -m ipykernel install --user --name ml_env --display-name "Python (ML)"
 deactivate
 
 # Graph and map visualization environment (inherits BERDL packages + adds viz tools)
 python -m venv --system-site-packages ~/viz_env
 source ~/viz_env/bin/activate
-pip install folium pyvis ipykernel
+pip install folium pyvis
 python -m ipykernel install --user --name viz_env --display-name "Python (Visualization)"
 deactivate
 
 # Bioinformatics environment (inherits BERDL packages + adds bio tools)
 python -m venv --system-site-packages ~/bio_env
 source ~/bio_env/bin/activate
-pip install pydeseq2 dendropy ipykernel
+pip install pydeseq2 dendropy
 python -m ipykernel install --user --name bio_env --display-name "Python (Bioinformatics)"
 deactivate
 ```

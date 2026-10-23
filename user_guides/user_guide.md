@@ -188,15 +188,16 @@ cannot change it. Create a venv once and install into it:
 
 ```bash
 python -m venv --system-site-packages ~/envs/myproj && source ~/envs/myproj/bin/activate
-pip install ipykernel <package>
+pip install <package>
 python -m ipykernel install --user --name myproj --display-name "Python (myproj)"   # optional: use it as a kernel
 ```
 
 `--system-site-packages` keeps the image's packages (PySpark, pandas,
-`berdl_notebook_utils`) available inside the venv; leave it out for an environment without
-the image's packages (only PySpark stays importable; pandas, `berdl_notebook_utils` and the
-pre-loaded helpers do not). The [custom packages guide](custom_packages_guide.md) walks
-through this step by step.
+`berdl_notebook_utils`, and the `ipykernel` the kernel line uses) available inside the
+venv; leave it out for an environment without the image's packages (only PySpark stays
+importable; pandas, `berdl_notebook_utils` and the pre-loaded helpers do not, and you need
+`pip install ipykernel` to use it as a kernel). The
+[custom packages guide](custom_packages_guide.md) walks through this step by step.
 
 For **tools from conda** (for example bioconda programs such as BLAST or HMMER), create a
 conda environment in your home; it persists across server restarts:
