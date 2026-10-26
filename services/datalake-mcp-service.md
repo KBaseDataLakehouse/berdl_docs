@@ -23,8 +23,8 @@ This design ensures that while AI agents can drive operations, users and other s
 - **Natural Language to SQL**: Translates user prompts into Spark SQL queries.
 - **Direct Data API**: Exposes standard REST endpoints (FastAPI) for direct programmatic access to data, independent of the MCP layer.
 - **Multi-Engine Query Support**:
-    - **Spark Connect**: Default engine — connects to user's dynamic Spark cluster or shared static cluster.
-    - **Trino**: Lightweight HTTP-based engine for fast, concurrent queries. Set via `QUERY_ENGINE=trino` or per-request `engine` field.
+    - **Trino**: the default engine since 2026-10-01 (`QUERY_ENGINE=trino`): answers without a running notebook and never touches the user's Spark.
+    - **Spark**: chosen per request with `engine: spark` (Spark SQL, or data only Spark can read). Connects to the user's notebook Spark Connect server when it runs; otherwise, since 2026-10-26, to a **session pod** created for the user by the Spark Cluster Manager's session gateway ([spark-session-gateway.md](./spark-session-gateway.md)); a standalone application on the shared cluster is the fallback when the gateway refuses or is down.
 - **Iceberg Tables**: Queries Iceberg tables in the Apache Polaris REST catalogs (the personal `my` / `<username>` catalog and `<tenant>` catalogs); table data lives in MinIO.
 
 ## Architecture
@@ -33,7 +33,11 @@ This design ensures that while AI agents can drive operations, users and other s
 graph LR
     AI[AI Assistant] -->|MCP Protocol| DS[Datalake MCP Server]
     User[User/Script] -->|REST API| DS
-    DS -->|Spark Connect| SP[Spark Cluster]
+    DS -->|Trino, the default| TR[Trino]
+    DS -->|Spark Connect| NB[User's notebook server]
+    DS -->|POST /sessions when no notebook| SCM[Spark Cluster Manager]
+    SCM -->|creates| SP[Session pod on the shared cluster]
+    DS -->|Spark Connect| SP
     DS -->|Iceberg REST| POL[Apache Polaris]
     DS -->|S3 API| IO[MinIO]
 ```
@@ -75,8 +79,8 @@ graph LR
 
 ## Integrations
 
-- **Spark Connect**: Connects to user's dynamic cluster or falls back to shared static cluster.
-- **Trino**: Alternative query engine via DB-API HTTP connections. Per-request or global selection.
+- **Trino**: the default engine, via DB-API HTTP connections as the user, with a personal catalog created on the coordinator.
+- **Spark Connect**: the user's notebook server when it runs; otherwise a session pod from the Spark Cluster Manager (`BERDL_AGENT_SHARED_SPARK=true`, `SESSION_GATEWAY_URL`), with the shared cluster's standalone applications as the fallback. A running notebook always wins.
 - **Apache Polaris**: Iceberg REST catalog for table metadata, reached with each user's Polaris credentials from the MinIO Manager Service.
 - **MinIO**: `http://minio:9002` - Underlying S3 storage.
 - **Redis**: Caching layer for improved performance.

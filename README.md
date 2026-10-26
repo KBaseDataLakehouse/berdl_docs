@@ -267,7 +267,7 @@ graph TD
 | | **Core Backend Services** | | |
 | **MinIO Manager Service** | Central governance authority for credentials, tenants, and IAM policies. | [MinIO Manager Service](./services/minio-manager-service.md) | [Repo](https://github.com/KBaseDataLakehouse/minio_manager_service) |
 | **Datalake MCP Server** | FastAPI Data API with MCP layer for AI interactions and direct queries. | [Datalake MCP Service](./services/datalake-mcp-service.md) | [Repo](https://github.com/KBaseDataLakehouse/datalake-mcp-server) |
-| **Spark Cluster Manager** | API for managing dynamic, personal Spark clusters on K8s. | [Spark Cluster Manager](./services/spark-cluster-manager.md) | [Repo](https://github.com/KBaseDataLakehouse/spark_cluster_manager) |
+| **Spark Cluster Manager** | Session pods for users without a notebook (gateway and reaper), dedicated per-user clusters as the rollback path, usage records. | [Spark Cluster Manager](./services/spark-cluster-manager.md), [Session Pods and the Session Gateway](./services/spark-session-gateway.md) | [Repo](https://github.com/KBaseDataLakehouse/spark_cluster_manager) |
 | **Tenant Access Request Service** | Slack workflow for users to request access to tenant groups. | [Tenant Access Request Service](./services/tenant-access-request-service.md) | [Repo](https://github.com/KBaseDataLakehouse/tenant_access_request_service) |
 | **Spark Cluster** | Spark master/worker image for static and dynamic clusters. | [Spark Cluster](./services/spark-cluster.md) | [Repo](https://github.com/KBaseDataLakehouse/kube_spark_manager_image) |
 | | **Data Tools & Frameworks** | | |

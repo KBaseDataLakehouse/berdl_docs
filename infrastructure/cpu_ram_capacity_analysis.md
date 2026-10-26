@@ -24,7 +24,7 @@
 
 ### 1.2 User Workload Components
 
-A user session has **two Spark parts on two node groups**, both set up by [BERDL_JupyterHub](https://github.com/KBaseDataLakehouse/BERDL_JupyterHub/blob/main/berdlhub/config/profiles.py#L36) at spawn (the profile definitions are in `berdlhub/config/profiles.py`): the notebook pod, which also hosts the Spark driver, and executors taken from the shared cluster on demand.
+A user session has **two Spark parts on two node groups**, both set up by [BERDL_JupyterHub](https://github.com/KBaseDataLakehouse/BERDL_JupyterHub/blob/main/berdlhub/config/profiles.py#L36) at spawn (the profile definitions are in `berdlhub/config/profiles.py`): the notebook pod, which also hosts the Spark driver, and executors taken from the shared cluster on demand. A user with **no notebook** who reaches Spark through the data API gets a third kind of part instead of the notebook: a **session pod**, the same Spark Connect server as its own small pod on the shared cluster's nodes (section 3.5).
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
@@ -49,11 +49,16 @@ A user session has **two Spark parts on two node groups**, both set up by [BERDL
 │  │ (kworker-11) │   │ one executor pool for all users;      │  │
 │  └──────────────┘   │ a worker fits 4 Medium or 2 Large     │  │
 │                     └───────────────────────────────────────┘  │
+│  ┌───────────────────────────────────────────────────────────┐ │
+│  │ up to 12 session pods (6 per node, 1 CPU / 5 GiB each):   │ │
+│  │ Spark Connect server = driver for a user with no notebook │ │
+│  └───────────────────────────────────────────────────────────┘ │
 └────────────────────────────────────────────────────────────────┘
 ```
 
 - The **driver** is the Spark Connect server inside the notebook pod; kernels, the data API and remote clients (through the Spark Connect proxy) talk to it over gRPC. Its memory is part of the pod's limit. Home directories are on the node's local disk (`/mnt/state/prod/hub_homes/{username}`).
 - **Executors** come from one pool shared by all users: 26 workers of 12 cores / 84 GiB, 13 per node, each fitting 4 Medium or 2 Large executors. A user's job takes executors from the pool up to the profile's cap (3 Medium or 10 Large) and releases them a minute after the last task (10 minutes if they hold shuffle data, 15 if they hold cached blocks). An idle user holds nothing on the cluster; the master (kworker-11, 2 CPU / 8 GiB) keeps file-based recovery.
+- **Session pods** are the driver for a user who has no notebook running and queries Spark through the data API: one pod per user, created on demand by the Spark Cluster Manager's session gateway with the user's own credentials, Medium shape (up to 3 executors from the pool), removed after 10 idle minutes. They sit on the pool nodes in the room the workers leave, 6 per node, 12 in all (section 3.5; [spark-session-gateway.md](../services/spark-session-gateway.md)).
 - Other users of the same cluster: the data API's standalone applications (section 3.4) and the event processor.
 - **Trino** (section 5) runs on its own node and answers SQL for notebooks and for the data API, which defaults to it.
 
@@ -104,7 +109,7 @@ A user picks **Medium** or **Large** at spawn ([profile definitions](https://git
 
 ## 3. Shared Spark Cluster (kworker-11 + kworker-18)
 
-The shared Spark standalone cluster carries every notebook user's Spark since 2026-10-11, plus the data API's standalone applications and the event processor. Design and operations: [shared_spark_compute_design.md](shared_spark_compute_design.md). Re-cut to the shape below on 2026-10-03.
+The shared Spark standalone cluster carries every notebook user's Spark since 2026-10-11, the session pods of users without a notebook since 2026-10-26 (section 3.5), plus the data API's standalone applications and the event processor. Design and operations: [shared_spark_compute_design.md](shared_spark_compute_design.md). Re-cut to the shape below on 2026-10-03.
 
 ### 3.1 Cluster Configuration
 
@@ -112,7 +117,8 @@ The shared Spark standalone cluster carries every notebook user's Spark since 20
 |-----------|------:|-------:|---------:|------|
 | Spark Master | 2 | 8 GiB (4 GiB daemon heap) | 1 | kworker-11 |
 | Spark Workers | 12 each | 84 GiB each (`SPARK_WORKER_MEMORY=72g`) | 26 (13 per node) | kworker-11 + kworker-18 |
-| **Total** | **314** | **2,192 GiB** | | **312 worker cores, 1,872 GiB of executor memory** |
+| Session pods (on demand) | 1 each (limit 2) | 5 GiB each (limit 6 GiB) | 0 to 12 (6 per node) | kworker-11 + kworker-18 |
+| **Total** | **314, up to 326 with every session slot taken** | **2,192 GiB, up to 2,252 GiB** | | **312 worker cores, 1,872 GiB of executor memory** |
 
 > The master keeps `FILESYSTEM` recovery on a host path, so a restart re-adopts running applications, and `spark.deploy.defaultCores=8` bounds a session that sets no core limit. Workers are placed by node affinity on the two tainted nodes; 13 per node uses 156 of 168 cores and leaves memory for the node's own daemons.
 >
@@ -120,10 +126,12 @@ The shared Spark standalone cluster carries every notebook user's Spark since 20
 
 ### 3.2 Resource Utilization (requests on the two nodes)
 
-| Resource | Allocatable (2 nodes) | Requested | Utilization |
-|----------|----------------------:|----------:|------------:|
-| CPU | 336 cores | 314 cores | **93.5%** |
-| RAM | 2,266 GiB | 2,192 GiB | **96.7%** |
+| Resource | Allocatable (2 nodes) | Requested by master + workers | Utilization | With 12 session pods |
+|----------|----------------------:|----------:|------------:|------------:|
+| CPU | 336 cores | 314 cores | **93.5%** | 326 cores, 97.0% |
+| RAM | 2,266 GiB | 2,192 GiB | **96.7%** | 2,252 GiB, 99.4% |
+
+The session pods take what the workers leave: 10 cores / about 33 GiB on kworker-11 (the master takes 2 / 8), 12 cores / about 41 GiB on kworker-18. At 5 GiB of memory request each, that is 6 per node, which is where the cap of 12 comes from; the remaining few GiB stay with the node's own daemons.
 
 ### 3.3 Capacity Model (what the pool serves)
 
@@ -131,13 +139,14 @@ The shared Spark standalone cluster carries every notebook user's Spark since 20
 |---|---:|---:|
 | slots on two nodes | 104 | 52 |
 | one user at full burst | 3 (Medium cap) | 10 (Large cap, 20 Medium units) |
-| each added node (13 workers) | +52 | +26 |
+| one session pod at full burst | 3 (Medium cap; 12 sessions take 36 at most) | |
+| each added node (13 workers, 6 session slots) | +52 | +26 |
 
 Demand is measured, not reserved. Over the first two days with every user on the pool (19 notebooks at once at most): peak 84 of 312 cores in use, p95 of 12 executors held at once across all users, the worst user short of an executor for 18 minutes in total, first executor after idle in 2.7 s at the median and 2.8 s at the 95th percentile, 3,497 executor endings all normal. Growing the pool is one Deployment edit per node (design doc, section 4); the idle nodes and, once empty, the ten retiring pool nodes are the candidates.
 
 ### 3.4 Data API Executor Configuration
 
-The [datalake-mcp-server](https://github.com/KBaseDataLakehouse/datalake-mcp-server) (data API) answers through Trino by default since 2026-10-01. Its Spark path uses the caller's own notebook Connect server when one is running, and otherwise a standalone application on the shared cluster:
+The [datalake-mcp-server](https://github.com/KBaseDataLakehouse/datalake-mcp-server) (data API) answers through Trino by default since 2026-10-01. Its Spark path uses the caller's own notebook Connect server when one is running, since 2026-10-26 a session pod for the caller otherwise (section 3.5), and a standalone application on the shared cluster only when the session gateway refuses (every slot taken, pod still starting, credentials unavailable) or is down:
 
 | Setting | Value | Description |
 |---------|-------|-------------|
@@ -147,7 +156,20 @@ The [datalake-mcp-server](https://github.com/KBaseDataLakehouse/datalake-mcp-ser
 | `STANDALONE_SPARK_POOL_SIZE` | 8 | Concurrent standalone sessions per replica |
 | **Per-job total** | **4 cores, 32 GiB** | 2 executors × (2c, 16G) |
 
-**Executor packing per worker (12c, 72G):** 6 by CPU, 4 by memory → **4 executors per worker**, 26 workers × 4 = **104 executor slots**, or **52 concurrent standalone jobs** against 8 replicas × pool size 8 = 64 sessions. In practice the standalone path serves a handful of calls a day; the notebook applications set the pool's load.
+**Executor packing per worker (12c, 72G):** 6 by CPU, 4 by memory → **4 executors per worker**, 26 workers × 4 = **104 executor slots**, or **52 concurrent standalone jobs** against 8 replicas × pool size 8 = 64 sessions. In practice the standalone path serves a handful of calls a day; the notebook applications set the pool's load. The standalone pool stays as the fallback behind the session pods for a soak period and is then removed.
+
+### 3.5 Session Pods (users with Spark but no notebook)
+
+Since 2026-10-26 a data API request on the Spark engine from a user whose notebook is not running gets a **session pod**: the Spark Cluster Manager's session gateway creates `spark-agent-<user>` (a Deployment with one pod, a Service and a credentials Secret) on a pool node with the user's own S3 and Polaris credentials, the data API connects to it like to a notebook's Connect server, and the manager's session reaper removes it after 10 minutes without activity and with no running job (8 hours at most while jobs run, 24 regardless). Full description: [spark-session-gateway.md](../services/spark-session-gateway.md).
+
+| | Value | Why |
+|---|---|---|
+| Shape | Medium: up to 3 executors of 3 cores from the pool, 4 GiB driver heap | the same executors a Medium notebook gets, so the pool model above holds |
+| Pod request / limit | 1 CPU, 5 GiB / 2 CPU, 6 GiB | the Connect server JVM plus headroom |
+| Where | the pool nodes, in the requests the 13 workers leave (about 12 cores and 40 GiB per node) | the image is already there and the executors are local |
+| Cap | **12** (6 per node), the `caps.global_sessions` key of the manager's policy file | 6 × 5 GiB fits what each node has left; raise it by 6 per node added to the pool |
+| Cold start | about 15 s to a ready pod, 15 to 25 s to the first answer | measured on dev and prod, 2026-10-25/26 |
+| Past the cap | the gateway answers 429; the data API runs the query on the standalone path; a user who starts a notebook is served by it at once | nothing fails, the request is slower |
 
 ---
 
@@ -160,6 +182,7 @@ The [datalake-mcp-server](https://github.com/KBaseDataLakehouse/datalake-mcp-ser
 | Concurrent notebook users (servers running) | **~160**, either profile | kworker-03's 1-core guarantee per pod (section 2); the shared cluster adds no per-user limit, an idle user holds no executors there |
 | Users running Spark jobs at the same instant **before anyone waits** | **34 Medium** or **5 Large** at full cap, or any mix whose bursts add up to 312 cores (a Medium user at full cap uses 9, a Large user 60) | the pool is 312 cores: 104 executors of 3 cores or 52 of 6 (section 3.3) |
 | What happens past that | jobs **wait** for executors, they do not fail | the master grants executors as others release them (60 s after a job's last task); a waiting job's cell simply takes longer |
+| Users with Spark through the data API but **no notebook** at the same time | **12** with a session pod each (6 per pool node); more are served by the standalone pool | section 3.5: the pods live on the requests the workers leave; each node added to the pool adds 6 |
 | Trino concurrent queries | 40–96 by load; 50 global, 10 per user by resource groups | kworker-12 (section 5) |
 
 So **160 users of the Large profile can all be connected**: each has its driver in its own pod and an application registered on the master holding nothing while idle. If all 160 ran a job at the same instant, the master would grant the 52 Large executors to the first requests, one per user, and the other users' jobs would wait their turn; with executors released a minute after each job's last task, the pool turns over at the pace of the jobs. In practice the measured simultaneous demand has been a dozen executors, so nobody has waited more than a few minutes in total over two days.

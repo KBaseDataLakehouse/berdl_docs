@@ -10,16 +10,15 @@
 
 ## Overview
 
-This image is used to run Spark clusters in Kubernetes. It supports two deployment modes:
+This image is used to run Spark in Kubernetes. It supports three modes, selected with the `SPARK_MODE` environment variable:
 
-1.  **Static Cluster**: Manually deployed to K8s for shared/fallback use (e.g., by the Datalake MCP Server).
-2.  **Dynamic Cluster**: Automatically deployed per-user by the [Spark Cluster Manager](./spark-cluster-manager.md) upon JupyterHub login.
-
-Both modes use the same image, configured via the `SPARK_MODE` environment variable.
+1.  **Shared (static) cluster**: the master and the 26 workers every notebook user's Spark runs on since 2026-10-11 ([shared_spark_compute_design.md](../infrastructure/shared_spark_compute_design.md)); also used by the Datalake MCP Server's standalone applications.
+2.  **Dedicated (dynamic) cluster**: a master and workers per user, deployed by the [Spark Cluster Manager](./spark-cluster-manager.md); the rollback path since the shared cluster took over.
+3.  **Connect** (`SPARK_MODE=connect`, since 2026-10-24): one user's Spark Connect server in the foreground, the **session pod** the Spark Cluster Manager's gateway creates for a user who has no notebook ([spark-session-gateway.md](./spark-session-gateway.md)). It renders the same Spark configuration a notebook gets, from the environment and a mounted credentials Secret.
 
 ## Key Features
 
-- **Dual Mode Support**: Runs as either `master` or `worker` based on `SPARK_MODE` env var.
+- **Three modes**: runs as `master`, `worker` or `connect` (a Spark Connect server) based on the `SPARK_MODE` env var.
 - **Inherited Environment**: Built on `spark_notebook` Base, inheriting all Python dependencies and Spark configurations.
 - **Redis Caching Integration**: Includes built-in support for Redis caching to accelerate Spark DataFrame operations.
 - **K8s Native**: Designed for Kubernetes deployment with proper entrypoint scripts.

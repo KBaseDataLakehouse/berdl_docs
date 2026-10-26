@@ -4,7 +4,7 @@ How BERDL schedules Spark for notebook users on the shared cluster: the cluster 
 
 This document describes the cluster as deployed: the worker re-cut of 2026-10-03, a staff cohort from 2026-10-05, and every notebook user since 2026-10-11 15:33 UTC. The capacity figures live in section 3 of [cpu_ram_capacity_analysis.md](cpu_ram_capacity_analysis.md); that document keeps the per-user cluster model (its section 6) only because it is the rollback path.
 
-Updated 2026-10-13.
+Updated 2026-10-26: session pods for users without a notebook (sections 2.3, 2.5 and 4).
 
 ---
 
@@ -59,7 +59,7 @@ The shared cluster is a set of identical Spark standalone worker pods. Each is c
 
 - **12 cores** is a multiple of both 3 and 6: a worker holds 4 Medium executors, 2 Large, or 2 Medium + 1 Large. The previous 8-core cut strands 2 cores under every Medium-shaped executor.
 - **84 GiB container, `SPARK_WORKER_MEMORY=72g`**: 72 GiB is four 18 GiB heaps (the amount the Spark worker hands out); the remaining 12 GiB covers the executors' off-heap overhead (10 % of each heap) and the worker's own JVM, so a full worker stays under its limit. The previous cut set the Spark memory equal to the container limit, which is where executor kills at the limit came from.
-- **13 workers per node** use 156 of 168 cores and 1,092 of 1,133 GiB and leave the rest for the node's own daemons and the monitoring agent, which the previous 20-per-node cut did not.
+- **13 workers per node** use 156 of 168 cores and 1,092 of 1,133 GiB and leave the rest for the node's own daemons and the monitoring agent, which the previous 20-per-node cut did not. Since 2026-10-26 that leftover, about 12 cores and 40 GiB per node, also hosts the **session pods**: the Spark Connect server of a user who queries Spark through the data API without a notebook, one small pod per user (1 CPU / 5 GiB requested), 6 per node by memory, created on demand by the cluster manager and removed when idle ([spark-session-gateway.md](../services/spark-session-gateway.md)). Their executors come from the same pool, in the Medium shape.
 
 Two nodes (kworker-11 and kworker-18) give **26 workers, 312 cores, 2,184 GiB: 104 Medium executor slots, or 52 Large, or any mix.** One Large user at full burst takes 20 of the 104 slots; the measured fleet-wide peak was 21 executors. Each additional node adds 13 workers and 52 Medium slots (section 4).
 
@@ -82,7 +82,7 @@ Known and accepted: a server whose executors hold cached data stays allocated fo
 
 | node(s) | role | notes |
 |---|---|---|
-| kworker-11, kworker-18 | shared Spark cluster | tainted `environments=prodsparkworker:NoSchedule`, so only the shared workers and the master land there |
+| kworker-11, kworker-18 | shared Spark cluster | tainted `environments=prodsparkworker:NoSchedule`, so only the shared workers, the master and the session pods land there; the session pods (up to 6 per node, 12 in all) take the requests the 13 workers leave |
 | kworker-03 | all notebook pods | unchanged; the Spark Connect server, which is the driver, runs inside the notebook pod |
 | kworker-05 to 10, 14 to 17 | the retiring dedicated pool | no new dedicated cluster has been created since 2026-10-11; four clusters started before the change remain until their users restart, then the nodes move to the shared cluster a pair at a time (section 4.2) |
 | kworker-01, 04, 13, 19, 20 | idle apart from a monitoring agent | the first candidates for growing the shared cluster |
@@ -106,12 +106,12 @@ Known and accepted: a server whose executors hold cached data stays allocated fo
 
 ## 4. Growing the cluster for a workshop or a demo
 
-Plan for the peak: slots needed ≈ (users expected to run at the same time) × (executors per burst, 1–3 for Medium, up to 10 for Large) + pinned users at their cap. Each node adds 13 workers = 52 Medium slots or 26 Large.
+Plan for the peak: slots needed ≈ (users expected to run at the same time) × (executors per burst, 1–3 for Medium, up to 10 for Large) + pinned users at their cap. Each node adds 13 workers = 52 Medium slots or 26 Large, and room for 6 more session pods (agents without a notebook, 3 Medium executors each at full burst).
 
 Growing the cluster is a change to one Deployment, `sharedsparkclusterworker` in the `prod` namespace: add the node's hostname to the worker pod's node affinity and raise `replicas` by 13 per node. Nothing changes on the master, the new workers register themselves within a minute, and running applications pick them up for their next executor request. Before that:
 
 1. **Pick a node with the room.** Each node needs 13 × 12 cores and 13 × 84 GiB free of requests. The idle nodes (kworker-01, 04, 13, 19, 20) have it today; a per-user pool node does not until its dedicated clusters are gone.
-2. **Keep other workloads off it.** Remove the node from the Spark cluster manager's `MASTER_NODE_SELECTOR_VALUES` / `WORKER_NODE_SELECTOR_VALUES` (its ConfigMap) and restart the manager, so no new dedicated cluster lands there; if it is a pool node, let its existing clusters drain (users respawn) and check with `kubectl get pods -o wide`. Taint it like the other shared nodes (`environments=prodsparkworker:NoSchedule`) so nothing else is scheduled onto it; the worker pods already carry the matching toleration.
+2. **Keep other workloads off it.** Remove the node from the `dedicated_clusters.placement` lists of the Spark cluster manager's policy file (the `spark-cluster-manager-policy` ConfigMap, picked up without a restart), so no new dedicated cluster lands there; if it is a pool node, let its existing clusters drain (users respawn) and check with `kubectl get pods -o wide`. Taint it like the other shared nodes (`environments=prodsparkworker:NoSchedule`) so nothing else is scheduled onto it; the worker pods and the session pods already carry the matching toleration.
 3. **Edit the Deployment** (through the Rancher kubectl described in the Kubernetes testing runbook):
 
    ```bash
@@ -124,7 +124,8 @@ Growing the cluster is a change to one Deployment, `sharedsparkclusterworker` in
 
    The scheduler places the 13 new pods on the only node in the list with room. Confirm the placement with `kubectl -n prod get pods -l app.kubernetes.io/name=sharedsparkclusterworker -o wide` and the registration on the master JSON (`workers` count, all `ALIVE`).
 4. **Record the change for the manifests.** The Deployment is declared in the GitLab `manifests` repo (`definitions/sharedsparkcluster/overlays/prod`), which is behind the live cluster and is being rewritten. Until that rewrite lands, do not apply the overlay (it would revert the live Deployment); note the new hostnames and replica count for the rewrite.
-5. **During the event**, watch the master JSON for WAITING applications with pending requests and the `spark_cluster_usage` records; if they appear, add another node the same way.
+5. **Let the session pods use it too.** In the same policy file add the node to `sessions.placement.nodes` and raise `sessions.caps.global_sessions` by 6; the gateway reads the file within a minute. Skip this step if the node is only meant for a workshop's notebooks and will be removed afterwards.
+6. **During the event**, watch the master JSON for WAITING applications with pending requests and the `spark_cluster_usage` records; if they appear, add another node the same way.
 
 ### 4.1 Shrinking afterwards
 
@@ -162,4 +163,5 @@ The executor column repeats on purpose: the shapes are the pool's packing units,
 ## 6. Related
 
 - [cpu_ram_capacity_analysis.md](cpu_ram_capacity_analysis.md): node inventory, the shared-cluster capacity model (section 3) and the per-user cluster model kept for the rollback path (section 6).
-- Notebook image: [spark_notebook](https://github.com/KBaseDataLakehouse/spark_notebook) (Connect server, dynamic allocation, watchdog); hub: [BERDL_JupyterHub](https://github.com/KBaseDataLakehouse/BERDL_JupyterHub) (profiles, role gates); cluster manager: [spark_cluster_manager](https://github.com/KBaseDataLakehouse/spark_cluster_manager) (dedicated clusters, usage reporter); worker image: [kube_spark_manager_image](https://github.com/KBaseDataLakehouse/kube_spark_manager_image).
+- [spark-session-gateway.md](../services/spark-session-gateway.md): the session pods for users without a notebook, which share these nodes and this pool.
+- Notebook image: [spark_notebook](https://github.com/KBaseDataLakehouse/spark_notebook) (Connect server, dynamic allocation, watchdog); hub: [BERDL_JupyterHub](https://github.com/KBaseDataLakehouse/BERDL_JupyterHub) (profiles, role gates); cluster manager: [spark_cluster_manager](https://github.com/KBaseDataLakehouse/spark_cluster_manager) (session gateway and reaper, dedicated clusters as the rollback path, usage reporter); worker image: [kube_spark_manager_image](https://github.com/KBaseDataLakehouse/kube_spark_manager_image) (worker and Connect modes).
