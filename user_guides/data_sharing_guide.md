@@ -35,7 +35,7 @@ Every BERDL notebook imports these data governance functions when its kernel sta
 - `get_my_workspace()` - Get comprehensive workspace information
 - `get_my_groups()` - Get list of groups you belong to
 - `get_my_policies()` - Get detailed policy information
-- `get_my_accessible_paths()` - Get every S3 prefix you can read
+- `get_my_accessible_paths()` - Get every S3 prefix you can read; `.paths` marks each one `read` or `write`
 
 *Tenant Functions:*
 - `list_tenants()` - Every tenant, with member counts and whether you are a member or steward

@@ -175,10 +175,20 @@ A few things that commonly trip people up:
 To see exactly which prefixes you're entitled to, run in a notebook cell:
 
 ```python
-get_my_accessible_paths()   # the prefixes you can list/read
+get_my_accessible_paths()   # the prefixes you can list/read, each marked read or write
 get_my_sql_warehouse()      # your SQL-warehouse root (list-only; tables land here via Spark)
 get_my_policies()           # the raw IAM policy, including its s3:prefix conditions
 ```
+
+To list only the prefixes you can write to:
+
+```python
+[p.path for p in get_my_accessible_paths().paths if p.access == "write"]
+```
+
+Write on a folder covers everything under it. In a tenant with
+[personal folders](#per-user-write-areas), the tenant folder shows as `read`
+and your own `users/<user>/` folder as `write`.
 
 ## Credentials are kept current automatically
 
