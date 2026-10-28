@@ -94,9 +94,14 @@ folder with the AWS CLI, `boto3` or `pandas`:
 |---|---|---|
 | `lakehouse_minio/my-files` | `s3://cdm-lake/users-general-warehouse/<user>/` | Your files (read/write) |
 | `lakehouse_minio/my-sql` | `s3://cdm-lake/users-sql-warehouse/<user>/` | Your tables, managed by the catalog (see below) |
-| `lakehouse_minio/<tenant>-files` | `s3://cdm-lake/tenant-general-warehouse/<tenant>/` | A tenant's files (read/write; in [some tenants](#per-user-write-areas) you write only under `users/<user>/`) |
+| `lakehouse_minio/<tenant>-files` | `s3://cdm-lake/tenant-general-warehouse/<tenant>/` | A tenant's files (read/write; read-only in [tenants with personal folders](#per-user-write-areas)) |
+| `lakehouse_minio/<tenant>-my-files` | `s3://cdm-lake/tenant-general-warehouse/<tenant>/users/<user>/` | Your own folder in a [tenant with personal folders](#per-user-write-areas) (read/write) |
+| `lakehouse_minio/<tenant>-root` | `s3://cdm-lake/tenant-general-warehouse/<tenant>/root/` | That tenant's `root/` folder, for its stewards (read/write) |
 | `lakehouse_minio/<tenant>-sql` | `s3://cdm-lake/tenant-sql-warehouse/<tenant>/` | A tenant's tables |
 | `lakehouse_minio/<tenant>-files-ro`, `<tenant>-sql-ro` | The same two tenant paths | Tenants you have read-only access to |
+
+A read-only folder opens its files read-only, and saving, uploading, renaming or
+deleting there is refused.
 
 For example, to list in a terminal what the file browser shows as
 `lakehouse_minio/my-files`:
@@ -156,8 +161,9 @@ A few things that commonly trip people up:
 - <a id="per-user-write-areas"></a>**Some tenants give each member a personal
   folder to write in.** In these tenants, everyone in the tenant can read all of `tenant-general-warehouse/<tenant>/`, but you can
   write only under `tenant-general-warehouse/<tenant>/users/<user>/`; the
-  tenant's stewards can also write under `root/`. If an upload to the tenant
-  folder is denied, put the file in your own `users/<user>/` folder there.
+  tenant's stewards can also write under `root/`. In the file browser such a
+  tenant's `<tenant>-files` folder is read-only; your own folder is
+  `<tenant>-my-files` (stewards also get `<tenant>-root`), so upload there.
 - **You can't list a whole bucket, or a parent prefix that spans other
   users/tenants** — only the specific prefixes your policy grants (your
   `users-general-warehouse/<user>/` and `users-sql-warehouse/<user>/`, and the
