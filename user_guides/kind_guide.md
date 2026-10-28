@@ -26,6 +26,16 @@ pre-warms the app portals.
   between the two. You can also open `https://hub.berdl.kbase.us/user/<you>/lab`
   directly, or bookmark it. Explicit `/lab` URLs always go to Lab — only the
   bare server root (`https://hub.berdl.kbase.us/user/<you>/`) redirects to KIND.
+- **Prefer JupyterLab at login?** Create the marker file
+  `~/.kind/skip-autostart` (in a hub terminal: `mkdir -p ~/.kind && touch
+  ~/.kind/skip-autostart`) and stop + start your server. Your pod then boots
+  into the standard JupyterLab home. KIND and related apps are still available
+  and can be started from a terminal by running
+  `python3 -m berdl_notebook_utils.kind_server`, then open
+  `https://hub.berdl.kbase.us/user/<you>/proxy/8770/`. Note: to prevent
+  the pod being accidentally killed after starting up KIND manually, the terminal
+  window should be left running. To restore automatic KIND start up, remove the
+  marker file by executing `rm ~/.kind/skip-autostart`.
 - **Driving sessions needs an LLM credential** — BERDL does not provide one.
   Either run `claude` in a hub terminal and log in with a Claude Pro/Max
   account, or add an API key — `CBORG_API_KEY=...` (or `ANTHROPIC_API_KEY=...`)
@@ -159,6 +169,10 @@ KIND-role users in `pre_spawn_start` (BERDL_JupyterHub reads KBase custom
 roles into `auth_state.kind_user`; `KIND_ROLES` env on the hub names the
 roles). Everything below no-ops on other pods.
 
+If the user's home directory contains a `~/.kind/skip-autostart` marker file, the pod 
+opts out of automatically starting up KIND and sends the user to a JupyterLab window 
+instead; users can start KIND manually from the terminal if they wish to use it.
+
 1. **`configs/jupyter_docker_stacks_hooks/13-kind-seed.sh`** (root, before the
    notebook server): seeds `~/koros` + `~/semcat` if absent and **refreshes them to the image's
    pinned refs when they are git-clean and older than the image's** (the
@@ -207,6 +221,7 @@ roles). Everything below no-ops on other pods.
 | Env var | Default | Meaning |
 |---|---|---|
 | `BERDL_START_KIND` | unset (off) | Opt the pod into seeding + autostart; hub-injected per role. Local compose defaults it on |
+| `~/.kind/skip-autostart` | absent | User opt-out: skip the automatic seeding + autostart and land on JupyterLab instead of KIND. Manual `--restart` starts still work; remove the marker to restore the automatic startup |
 | `BERDL_KIND_WARM_APPS` | `all` | Apps to pre-launch after boot: `all`, a comma-separated id list, or `none` for launch-on-click |
 | `KIND_PORT` / `KING_PORT` | `8770` | KIND server port |
 | `BERDL_KIND_HEARTBEAT_SECONDS` | `300` | Cull-heartbeat scan interval |
