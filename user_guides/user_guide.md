@@ -95,16 +95,14 @@ Unqualified names resolve in your personal catalog, so `spark.sql("SELECT * FROM
 
 #### 5.2 Picking Up New Catalog Access
 
-When your catalog access changes while a notebook is already running (for example, a tenant request was approved), restart Spark Connect. It picks up your current catalog list as it starts:
+When you gain access to a tenant while a notebook is already running (for example, a tenant request was approved), call `get_spark_session()` again. It adds the new tenant's catalog to your Spark session without restarting anything, so queries that are running carry on:
 
 ```python
-start_spark_connect_server(force_restart=True)
-
-# Re-create the Spark session; the restart ends the old one
 spark = get_spark_session()
+spark.sql("SHOW CATALOGS").show()  # the new tenant is listed
 ```
 
-The restart ends every Spark session on your server, so run it between operations. Other notebooks you have open also need `spark = get_spark_session()` before their next Spark query. For what else to expect after a tenant request is approved, see [Requesting Tenant Access](requesting-tenant-access.md#after-your-request-is-approved).
+Other notebooks you have open pick the tenant up the same way. Creating a new namespace in the tenant you just joined still needs a Spark Connect restart; that, and what else to expect after a tenant request is approved, is in [Requesting Tenant Access](requesting-tenant-access.md#after-your-request-is-approved).
 
 #### 5.3 Displaying DataFrames
 
