@@ -101,18 +101,24 @@ Your access is active as soon as the request is approved, but a server that was 
 | Where | When the new tenant appears |
 |-------|-----------------------------|
 | Trino (`get_trino_connection()`, the AI assistant) | Within about 5 minutes; nothing to do |
-| Spark | After you restart Spark Connect (below) |
+| Spark | The next time you call `get_spark_session()` (below) |
 | File browser (`lakehouse_minio`) | Within about a minute of opening the folder; if not, restart your server |
 
 To use the tenant from Spark in a notebook that is already running:
 
 ```python
-start_spark_connect_server(force_restart=True)  # restarts Spark Connect with your new tenant catalogs
-spark = get_spark_session()
-spark.sql("SHOW CATALOGS").show()               # the new tenant is listed
+spark = get_spark_session()          # adds the new tenant to your Spark session; nothing is restarted
+spark.sql("SHOW CATALOGS").show()    # the new tenant is listed
 ```
 
-Other notebooks that are open need `spark = get_spark_session()` again before their next Spark query.
+Queries that are running carry on. Other notebooks that are open pick the tenant up the same way, with `spark = get_spark_session()`.
+
+One thing still needs a restart. Creating a new namespace in the tenant you just joined (`CREATE NAMESPACE <tenant>.<name>`) is refused until Spark Connect restarts; reading and writing tables in the tenant's existing namespaces works straight away. To restart Spark Connect:
+
+```python
+start_spark_connect_server(force_restart=True)  # stops queries that are running
+spark = get_spark_session()
+```
 
 The simplest alternative is to restart your server: **File → Hub Control Panel → Stop My Server**, then **Start My Server** (step by step in [Restarting Your Server](user_guide.md#restarting-your-server)). That picks up everything at once (Spark, the file browser and the cached group list) but also restarts your notebooks' kernels.
 
@@ -163,7 +169,7 @@ A: The toolbar dialog shows all available groups. Or use `list_available_groups(
 A: Approvals are processed when an admin reviews the Slack notification, usually the same business day.
 
 **Q: I was approved, but I can't see the tenant. What now?**
-A: Spark needs a Spark Connect restart before it sees a new tenant; the file browser shows its folders within about a minute, and Trino within about 5 minutes. See [After Your Request Is Approved](#after-your-request-is-approved).
+A: Spark sees a new tenant the next time you call `get_spark_session()`; the file browser shows its folders within about a minute, and Trino within about 5 minutes. See [After Your Request Is Approved](#after-your-request-is-approved).
 
 **Q: Can I request access to multiple tenants?**
 A: Yes, submit a separate request for each tenant.
