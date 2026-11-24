@@ -23,6 +23,7 @@ Step-by-step guides for working with the BERDL platform. Guides live under [`use
 | [Trino SQL Queries](./user_guides/trino_guide.md) | Interactive read-only SQL over your data lake tables with Trino. |
 | [Claude Code with the Data Lake](./user_guides/claude_code_guide.md) | Exploring and querying your tables in natural language with Claude Code and the BERDL MCP server. |
 | [Data Sharing](./user_guides/data_sharing_guide.md) | Sharing your datasets with other users and groups. |
+| [Projects](./user_guides/projects_guide.md) | Keeping the tables of one piece of work in a project, sharing it with chosen people, and forking someone else's. |
 | [Object Storage (S3)](./user_guides/s3_guide.md) | Accessing S3 object storage from notebooks with the AWS CLI and `boto3`, and which prefixes hold your files vs. your tables. |
 | [MinIO Client & UI](./user_guides/minio_guide.md) | Using the `mc` client (in notebooks and from your laptop) and the MinIO web UI (staging, production). |
 | [Installing Custom Python Packages](./user_guides/custom_packages_guide.md) | Creating a persistent custom virtual environment for extra packages, and installing command-line tools with pipx. |
