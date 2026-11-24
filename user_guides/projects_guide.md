@@ -1,7 +1,7 @@
 # Projects Guide
 
-> **Availability:** projects are new. They are on the BERDL development environment now and reach
-> production after testing there. Until then the functions in this guide are not in a production notebook.
+> **If your notebook was already running on 24 November 2026**, restart your server once to get projects:
+> stop it from the hub's control panel and start it again.
 
 This guide explains how to keep the tables of one piece of work in a **project**, share the project with the
 people you work with, and take your own copy of someone else's project.
