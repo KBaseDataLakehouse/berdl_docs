@@ -1,8 +1,5 @@
 # Projects Guide
 
-> **If your notebook was already running on 24 November 2026**, restart your server once to get projects:
-> stop it from the hub's control panel and start it again.
-
 This guide explains how to keep the tables of one piece of work in a **project**, share the project with the
 people you work with, and take your own copy of someone else's project.
 
@@ -163,7 +160,7 @@ next query.
 | What you see | Why | What to do |
 |--------------|-----|------------|
 | `Project '…' not found` | The ID is wrong, or you are not a member | Check `list_projects()`; ask the author to add you |
-| The catalog `projects` is not found | Your Spark server started before projects were available | Run `spark = get_spark_session()` again |
+| `create_project` is not defined, or the catalog `projects` is not found | Your notebook server started before projects were available | Restart your server: stop it from the hub's control panel and start it again |
 | Writing fails with `AccessDenied` or `Forbidden` | You are a read_only member | Ask the author for write access |
 | `A read-only collaborator cannot fork a project` | Only the author and read_write members can fork | Ask the author for write access |
 | `… a fork can copy at most 5.0 GiB for now` | The project is over the fork's size limit | Copy the tables you need with Spark into a project of your own |
