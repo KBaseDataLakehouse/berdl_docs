@@ -112,7 +112,7 @@ spark.sql(f"SELECT count(*) FROM {mine['spark_namespace']}.samples").show()
 - Each table is copied as it stood when you asked, without its history. Later changes to the original do
   not reach your fork, and your changes do not reach the original.
 - Only tables are copied, not views or files.
-- A project with more than 5 GiB of table data cannot be forked for now.
+- A project with more than 20 GiB of table data cannot be forked for now.
 
 By default `fork_project` waits until the copy ends. Always check `fork["status"]`: the new project exists
 even when the copy did not finish.
@@ -163,7 +163,7 @@ next query.
 | `create_project` is not defined, or the catalog `projects` is not found | Your notebook server started before projects were available | Restart your server: stop it from the hub's control panel and start it again |
 | Writing fails with `AccessDenied` or `Forbidden` | You are a read_only member | Ask the author for write access |
 | `A read-only collaborator cannot fork a project` | Only the author and read_write members can fork | Ask the author for write access |
-| `… a fork can copy at most 5.0 GiB for now` | The project is over the fork's size limit | Copy the tables you need with Spark into a project of your own |
+| `… a fork can copy at most 20.0 GiB for now` | The project is over the fork's size limit | Copy the tables you need with Spark into a project of your own |
 | `delete_project` is refused | The project still holds tables | Drop the tables first |
 | Trino says `Cannot access catalog projects` | Trino has not followed a recent change yet | Wait five minutes and try again |
 
